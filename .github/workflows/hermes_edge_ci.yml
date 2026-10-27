@@ -1,4 +1,4 @@
-name: Hermes-Edge 66-Seat Multi-Domain Committee & KuCoin Post-Mortem CI
+name: Hermes-Edge 103-Seat Multi-Domain Committee & KuCoin Post-Mortem CI
 
 on:
   push:
@@ -12,6 +12,8 @@ on:
 jobs:
   test-and-audit:
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ".:src"
     steps:
       - name: Checkout Hermes-Edge
         uses: actions/checkout@v4
@@ -20,6 +22,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install dependencies
-        run: pip install pytest
-      - name: Run Safety, Post-Mortem, and 66-Seat Committee Tests
-        run: pytest -q tests/
+        run: pip install -r requirements.txt pytest
+      - name: Run Safety, Post-Mortem, and 103-Seat Committee Tests
+        run: python -m pytest -q tests/

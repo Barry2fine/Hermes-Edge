@@ -17,6 +17,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
       - name: Run 28-Test Engine Safety & Diagnostics Suite
         run: python test_engine_safety_and_diagnostics.py -v
       - name: Run 3-Test KuCoin MFE/MAE Postmortem & Propr Step-Off Suite

@@ -1,4 +1,4 @@
-name: Hermes-Edge KuCoin 27-Seat Trade Cycle
+name: Hermes-Edge KuCoin 50-Seat + 1492-Coin Trade Cycle
 on:
   schedule:
     - cron: '*/15 * * * *'
@@ -12,6 +12,8 @@ jobs:
   kucoin-cycle:
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    env:
+      PYTHONPATH: ".:src"
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -21,20 +23,25 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Verify Coordination Lock & 72-Seat Committee
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Verify Coordination Lock & 103-Seat Committee + 1492 Coin Specialists
         run: |
           python -B -c "
           from src.ops.coordination import validate, can_trade
           from sovereign_bots.core.registry import all_bots
+          from sovereign_bots.bots.crypto.coin_specialists import ALL_1492_COIN_BOTS
           v = validate()
           assert v['ok'], v
           c = can_trade('kucoin', '*', owner='hermes')
           assert c['allowed'], c
-          assert len(all_bots()) == 72
-          print('PASS: coordination lock OK + 72-seat committee verified')
+          assert len(all_bots()) >= 103, len(all_bots())
+          assert len(ALL_1492_COIN_BOTS) == 1492
+          print(f'PASS: coordination lock OK + {len(all_bots())}-seat committee + {len(ALL_1492_COIN_BOTS)} coin specialists verified')
           "
 
-      - name: Run KuCoin 27-Seat Trade Cycle
+      - name: Run KuCoin 50-Seat Trade Cycle
         env:
           PYTHONPATH: .
           KUCOIN_API_KEY: ${{ secrets.KUCOIN_API_KEY }}
