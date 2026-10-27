@@ -141,6 +141,9 @@ def good_ctx():
         "local_orders": [],
     
         "coin": "SOL",
+        # telemetry the newer veto seats require (funding trap / vpin / cluster)
+        "funding_rate_bps": 1.0,
+        "minutes_to_funding": 40.0,
         "direction": "long",
         "entry": entry,
         "stop": round(entry * 0.97, 2),

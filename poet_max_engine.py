@@ -1558,17 +1558,26 @@ def main():
             # Refresh full dashboard + Worker sync every 3rd tick (~15s), and run L2 tick harvest every 5s!
             do_full = (sub_cycle == 1) or (sub_cycle % 3 == 0)
             run_once(sync_worker=do_full, full_dashboard=do_full)
-            # Every 12th tick (~60s): run local position defense & stop ratchet + check Box heartbeat failover
+            # Every 12th tick (~60s): check coordination/lock.json; stay strictly read-only when Sonia/Hermes hold live claims
             if sub_cycle == 1 or sub_cycle % 12 == 0:
                 import shared_desk_cli
-                r_res = shared_desk_cli.run_ratchet(execute=True, agent_name="poet_v5_watchdog", include_propr=False)
+                propr_claim = shared_desk_cli.check_coordination_lock("propr", "*", agent_id="grok")
+                kucoin_claim = shared_desk_cli.check_coordination_lock("kucoin", "*", agent_id="grok")
+                allow_exec = bool(propr_claim.get("allowed") or kucoin_claim.get("allowed"))
+                r_res = shared_desk_cli.run_ratchet(
+                    execute=allow_exec,
+                    agent_name="poet_v5_watchdog",
+                    include_propr=bool(propr_claim.get("allowed")),
+                )
                 ENGINE_METRICS["failover_watchdog"] = {
                     "last_local_ratchet_utc": r_res.get("as_of_utc"),
+                    "propr_claim_state": propr_claim.get("state"),
+                    "kucoin_claim_state": kucoin_claim.get("state"),
                     "propr_actions": len(r_res.get("propr_ratchet_actions") or []),
                     "kucoin_actions": len(r_res.get("kucoin_ratchet_actions") or []),
-                    "mode": "DUAL_ACTIVE_LOCAL_GUARD",
+                    "mode": "ACTIVE_CLAIM_HOLDER" if allow_exec else "READ_ONLY_COORDINATION_LOCK_ENFORCED",
                 }
-            # Every 36th tick (~180s): run autonomous trade dispatcher if open slots exist
+            # Every 36th tick (~180s): dry-run audit only (never mutate unowned venues)
             if sub_cycle % 36 == 0:
                 import shared_desk_cli
                 shared_desk_cli.run_auto_trade(execute=False, agent_name="poet_v5_failover", include_propr=False)

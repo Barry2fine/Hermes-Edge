@@ -1,0 +1,14 @@
+{
+  "_note": "Machine-readable ownership. A live order requires a 'live' claim covering (venue, asset) held by this bot's owner and NOT also held by another owner. Conflicts fail closed.",
+  "state": "OK",
+  "updated_at": "2026-10-27T18:50:00Z",
+  "claims": [
+    {"owner": "sonia", "venue": "propr", "assets": "*", "mode": "live",
+     "reason": "SovereignAI momentum desk on the Propr/Hyperliquid account"},
+    {"owner": "hermes", "venue": "kucoin", "assets": "*", "mode": "live",
+     "reason": "Hermes KuCoin desk (reported in the KuCoin postmortem audit)"}
+  ],
+  "open_questions": [
+    "Grok reported 'Propr is 100% handed off to Hermes'. If Hermes also wants propr live, add that claim — the desk will then refuse to trade and report CONFLICT until the duplication is resolved."
+  ]
+}

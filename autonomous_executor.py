@@ -573,7 +573,14 @@ def manage_and_execute_propr(
 
 
 def run_autonomous_executor(execute: bool = False, sync_worker: bool = True) -> Dict[str, Any]:
-    execute = False  # HARD-DISABLED BY CHIEF OF STAFF
+    try:
+        from shared_desk_cli import check_coordination_lock
+        kc_claim = check_coordination_lock("kucoin", "*", agent_id="grok")
+        if not kc_claim.get("allowed"):
+            execute = False
+    except Exception:
+        execute = False
+    execute = False  # HARD-DISABLED: Sonia owns propr/* and Hermes owns kucoin/* in coordination/lock.json
     t0 = time.time()
     kc = KuCoinClient()
 

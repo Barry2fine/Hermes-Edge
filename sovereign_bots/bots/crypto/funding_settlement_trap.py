@@ -39,8 +39,14 @@ class FundingSettlementTrapBot(Bot):
             rt_cost_bps = (float(ctx["fees_per_unit"]) / entry) * 10000.0 + spread_bps
         fee_to_stop = _num(ctx.get("fee_to_stop_ratio"))
 
-        if direction not in ("long", "short") and all(v is None for v in (mins_to_funding, stop_bps, rt_cost_bps, fee_to_stop)):
-            return Vote(self.id, "reject", 0.0, ["missing_funding_and_fee_inputs"], {})
+        if direction not in ("long", "short"):
+            return Vote(self.id, "reject", 0.0, ["missing_direction"], {})
+        # A veto seat that cannot see funding must NOT report "clear": absent
+        # telemetry is unknown, not favourable.
+        if funding_bps is None:
+            return Vote(self.id, "reject", 0.0, ["missing_funding_telemetry"], {})
+        if mins_to_funding is None:
+            return Vote(self.id, "reject", 0.0, ["missing_minutes_to_funding"], {})
 
         reasons = []
         evidence: Dict[str, Any] = {}

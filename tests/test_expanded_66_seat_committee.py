@@ -31,7 +31,14 @@ class Expanded66SeatTests(unittest.TestCase):
         self.assertTrue(b1.veto)
         self.assertEqual(b1.vote({"direction": "long", "minutes_to_funding": 8, "funding_rate_bps": 6.0}).decision, "reject")
         self.assertEqual(b1.vote({"direction": "short", "stop_distance_bps": 30.0, "round_trip_cost_bps": 12.0}).decision, "reject")
-        self.assertEqual(b1.vote({"direction": "short", "stop_distance_bps": 80.0, "round_trip_cost_bps": 12.0}).decision, "approve")
+        # A veto seat must not report "clear" when funding telemetry is absent:
+        # unknown is not favourable. Supply funding, then it can approve.
+        self.assertEqual(b1.vote({"direction": "short", "stop_distance_bps": 80.0,
+                                  "round_trip_cost_bps": 12.0}).decision, "reject")
+        self.assertEqual(b1.vote({"direction": "short", "stop_distance_bps": 80.0,
+                                  "round_trip_cost_bps": 12.0,
+                                  "funding_rate_bps": 1.0,
+                                  "minutes_to_funding": 40.0}).decision, "approve")
 
         # 2. VpinToxicFlowBot
         b2 = VpinToxicFlowBot()

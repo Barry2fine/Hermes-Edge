@@ -75,6 +75,136 @@ LOCK_FILE = os.path.join(STATE_DIR, "shared_desk_lock.json")
 AUDIT_LOG_FILE = os.path.join(STATE_DIR, "shared_desk_actions.jsonl")
 POET_TELEMETRY_FILE = os.path.join(STATE_DIR, "latest_poet_max_telemetry.json")
 
+COORDINATION_LOCK_FILE = os.path.join(STATE_DIR, "coordination", "lock.json")
+
+
+def _resolve_coordination_lock_path(lock_path: Optional[str] = None) -> str:
+    if lock_path and os.path.exists(lock_path):
+        return lock_path
+    for p in (
+        COORDINATION_LOCK_FILE,
+        os.path.join(SCRIPT_DIR, "coordination", "lock.json"),
+        "/workspace/github_repos/SovereignAI/coordination/lock.json",
+        "/home/box/desk/coordination/lock.json",
+        r"C:\Users\Simpl\grok-propr-bot\coordination\lock.json",
+        r"C:\Users\Simpl\SovereignAI\coordination\lock.json",
+    ):
+        if p and os.path.exists(p):
+            return p
+    return lock_path or COORDINATION_LOCK_FILE
+
+
+def check_coordination_lock(
+    venue: str,
+    asset: str = "*",
+    agent_id: str = "grok",
+    lock_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Machine-enforced coordination protocol (SovereignAI 68ace10):
+      - Exclusive venue claims in coordination/lock.json:
+          sonia  -> propr/*  (live)
+          hermes -> kucoin/* (live)
+      - Two live claims on same (venue, asset) = CONFLICT = both refuse.
+      - Missing / unreadable / stale lock = NO_LOCK = fail closed.
+      - Unclaimed or held by peer agent = NOT_OWNED / NO_CLAIM = refuse live mutation.
+    """
+    target_path = _resolve_coordination_lock_path(lock_path)
+    try:
+        with open(target_path, "r", encoding="utf-8") as f:
+            lock = json.load(f)
+    except Exception:
+        return {
+            "allowed": False,
+            "state": "NO_LOCK",
+            "reason": "coordination lock missing/unreadable — fail closed",
+        }
+    if not isinstance(lock, dict):
+        return {
+            "allowed": False,
+            "state": "NO_LOCK",
+            "reason": "coordination lock invalid — fail closed",
+        }
+    if lock.get("state") == "CONFLICT":
+        return {
+            "allowed": False,
+            "state": "CONFLICT",
+            "reason": "coordination lock in CONFLICT state — manual clear required",
+        }
+
+    venue_norm = str(venue or "").lower().strip()
+    asset_norm = str(asset or "*").upper().strip()
+    owner_norm = str(agent_id or "grok").lower().strip()
+
+    def _asset_match(claim_assets: Any, target_asset: str) -> bool:
+        if claim_assets in ("*", None) or target_asset == "*":
+            return True
+        if isinstance(claim_assets, str):
+            claim_assets = [claim_assets]
+        try:
+            return target_asset.upper() in {str(a).upper() for a in claim_assets}
+        except TypeError:
+            return False
+
+    def _expired(claim: Dict[str, Any]) -> bool:
+        exp = claim.get("expires_at")
+        if not exp:
+            return False
+        try:
+            dt = datetime.datetime.fromisoformat(str(exp).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=datetime.timezone.utc)
+            return dt < datetime.datetime.now(datetime.timezone.utc)
+        except Exception:
+            return True
+
+    claims = [c for c in (lock.get("claims") or []) if isinstance(c, dict)]
+    mine = []
+    theirs = []
+    for c in claims:
+        ca = c.get("assets") if "assets" in c else c.get("asset", "*")
+        if not _asset_match(ca, asset_norm):
+            continue
+        if str(c.get("venue") or "").lower().strip() != venue_norm:
+            continue
+        if _expired(c):
+            continue
+        if str(c.get("owner") or "").lower().strip() == owner_norm:
+            mine.append(c)
+        else:
+            theirs.append(c)
+
+    live_mine = [c for c in mine if str(c.get("mode") or "").lower().strip() == "live"]
+    live_theirs = [c for c in theirs if str(c.get("mode") or "").lower().strip() == "live"]
+
+    if live_mine and live_theirs:
+        return {
+            "allowed": False,
+            "state": "CONFLICT",
+            "reason": f"both {owner_norm} and {sorted({c.get('owner') for c in live_theirs})} claim live {venue_norm}/{asset_norm}",
+            "others": [c.get("owner") for c in live_theirs],
+        }
+    if live_theirs:
+        return {
+            "allowed": False,
+            "state": "NOT_OWNED",
+            "reason": f"{venue_norm}/{asset_norm} is claimed live by {sorted({c.get('owner') for c in live_theirs})}",
+            "others": [c.get("owner") for c in live_theirs],
+        }
+    if not live_mine:
+        return {
+            "allowed": False,
+            "state": "NO_CLAIM",
+            "reason": f"no live claim for {owner_norm} on {venue_norm}/{asset_norm}",
+        }
+    return {
+        "allowed": True,
+        "state": "OK",
+        "reason": "claim held",
+        "claim": live_mine[0],
+    }
+
+
 HL_SZ_DECIMALS = {
     "BTC": 5, "ETH": 4, "SOL": 2, "XRP": 0, "DOGE": 0,
     "AVAX": 2, "LINK": 1, "SUI": 1, "TAO": 3, "XMR": 3,
@@ -622,8 +752,28 @@ def run_ratchet(execute: bool = True, agent_name: str = "shared_cli", include_pr
     """
     Audits and ratchets stops + stages missing Maker TPs + cleans orphan stops
     across BOTH Propr and KuCoin Futures directly.
+    Strictly enforces coordination/lock.json for background/autonomous daemons.
     """
     t0 = time.time()
+    if agent_name in ("poet_v5_watchdog", "poet_v5_failover", "grok_autonomous", "grok") or os.environ.get("ENFORCE_COORDINATION_LOCK") == "1":
+        coord_owner = "grok" if agent_name in ("poet_v5_watchdog", "poet_v5_failover", "grok_autonomous", "grok") else agent_name
+        propr_coord = check_coordination_lock("propr", "*", agent_id=coord_owner)
+        kucoin_coord = check_coordination_lock("kucoin", "*", agent_id=coord_owner)
+        if not propr_coord.get("allowed") and not kucoin_coord.get("allowed"):
+            return {
+                "ok": True,
+                "as_of_utc": _now_iso(),
+                "as_of_edt": _now_edt(),
+                "host": "poet_windows_pc" if IS_WINDOWS else "grok_linux_box",
+                "execute": False,
+                "coordination_enforced": True,
+                "coordination_state": {"propr": propr_coord, "kucoin": kucoin_coord},
+                "propr_ratchet_actions": [],
+                "kucoin_ratchet_actions": [],
+                "mode": "READ_ONLY_COORDINATION_RESPECTED",
+            }
+        if not propr_coord.get("allowed"):
+            include_propr = False
     if agent_name in ("poet_v5_watchdog", "poet_v5_failover", "grok_autonomous") or os.environ.get("GROK_DISABLE_PROPR") == "1":
         include_propr = False
     if True:
@@ -1254,7 +1404,7 @@ def run_auto_trade(execute: bool = True, agent_name: str = "shared_cli", include
     if agent_name in ("poet_v5_watchdog", "poet_v5_failover", "grok_autonomous") or os.environ.get("GROK_DISABLE_PROPR") == "1":
         include_propr = False
     ratchet_res = run_ratchet(execute=execute, agent_name=agent_name, include_propr=include_propr)
-    if not ratchet_res.get("ok"):
+    if not ratchet_res.get("ok") or ratchet_res.get("coordination_enforced"):
         return ratchet_res
 
     pr = None
