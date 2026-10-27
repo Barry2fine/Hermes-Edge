@@ -2,6 +2,8 @@
 """
 Unit tests for KuCoin Futures MFE/MAE Post-Mortem Learning Loop + Pattern-Memory VETO + Propr Step-Off.
 """
+import os
+from pathlib import Path
 import tempfile
 import unittest
 from unittest import mock
@@ -14,6 +16,30 @@ from kucoin_learn.postmortem_gate import PostmortemBot
 
 
 class KuCoinPostmortemAndStepOffTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent, prefix="offline-fixture-")
+        self.addCleanup(temporary.cleanup)
+        self.state_dir = Path(temporary.name)
+        # Preserve the real lock implementation while isolating all state paths.
+        for name, value in {
+            "STATE_DIR": str(self.state_dir),
+            "LOCK_FILE": str(self.state_dir / "shared_desk_lock.json"),
+            "AUDIT_LOG_FILE": str(self.state_dir / "audit.jsonl"),
+            "POET_TELEMETRY_FILE": str(self.state_dir / "telemetry.json"),
+            "COORDINATION_LOCK_FILE": str(self.state_dir / "coordination.json"),
+        }.items():
+            patcher = mock.patch.object(shared_desk_cli, name, value)
+            patcher.start(); self.addCleanup(patcher.stop)
+
+    def test_real_lock_is_acquired_and_released_in_temporary_state(self):
+        self.assertTrue(shared_desk_cli.acquire_lock("offline-fixture"))
+        try:
+            self.assertTrue(Path(shared_desk_cli.LOCK_FILE).is_file())
+            self.assertIsNotNone(shared_desk_cli._LOCK_HANDLE)
+        finally:
+            shared_desk_cli.release_lock()
+        self.assertIsNone(shared_desk_cli._LOCK_HANDLE)
+
     def test_excursions_and_honest_labels(self):
         # 1. EARNED_WIN: clean unchased entry, hits target and captures >= 75%
         t_win = {"direction": "short", "entry": 100.0, "stop": 102.0, "target": 96.0, "r": 1.8, "risk_usd": 1.8}
@@ -49,7 +75,7 @@ class KuCoinPostmortemAndStepOffTests(unittest.TestCase):
         self.assertIn("oversized", g_bad["tags"])
 
     def test_pattern_memory_veto_and_seat_credit(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent, prefix="offline-fixture-") as tmp:
             t_bad = {
                 "trade_id": "t1", "coin": "ZEC", "direction": "short",
                 "entry": 1200.0, "stop": 1220.0, "target": 1160.0, "r": -1.0, "risk_usd": 2.5,
@@ -86,7 +112,6 @@ class KuCoinPostmortemAndStepOffTests(unittest.TestCase):
             self.assertEqual(sc["momentum"], -3.0)
 
     def test_propr_stepped_off_in_autonomous_and_watchdog(self):
-        import os; os.makedirs('data/runtime', exist_ok=True); os.makedirs('logs', exist_ok=True)
         with mock.patch.object(autonomous_executor, "ProprClient", side_effect=AssertionError("ProprClient must not be called")):
             res = autonomous_executor.manage_and_execute_propr({}, [], set(), execute=True)
             self.assertTrue(res.get("disabled_by_owner"))
@@ -99,9 +124,13 @@ class KuCoinPostmortemAndStepOffTests(unittest.TestCase):
         fake_kc.get_futures_stop_orders.return_value = []
         fake_kc.request.return_value = {"data": []}
         with mock.patch.object(shared_desk_cli, "ProprClient", side_effect=AssertionError("ProprClient must not be called by poet_v5_watchdog")), \
-             mock.patch.object(shared_desk_cli, "KuCoinClient", return_value=fake_kc):
+             mock.patch.object(shared_desk_cli, "KuCoinClient", return_value=fake_kc), \
+             mock.patch.object(shared_desk_cli, "check_coordination_lock", side_effect=lambda venue, *a, **k: {"allowed": venue == "kucoin"}), \
+             mock.patch.object(shared_desk_cli, "_load_aux_json_graceful", return_value={}):
             r = shared_desk_cli.run_ratchet(execute=True, agent_name="poet_v5_watchdog")
-            self.assertTrue(r.get("ok"))
+            self.assertTrue(r.get("ok"), r)
+            fake_kc.get_futures_overview.assert_called_once()
+            self.assertIsNone(shared_desk_cli._LOCK_HANDLE)
             self.assertEqual(r.get("propr_ratchet_actions"), [])
 
 
