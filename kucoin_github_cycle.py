@@ -4,27 +4,26 @@ GitHub Actions 15-Minute Autonomous KuCoin Multi-Service Cycle (50-Seat Crypto C
 Enforces `coordination/lock.json` (`hermes -> kucoin/* live`), cleans orphan stops,
 verifies every open Futures position has both a server-side Mark-Price (`MP`) stop-market
 and a resting `postOnly` `reduceOnly` Maker Take-Profit (`2.1R`), monitors KuCoin Spot
-OCO/Maker brackets, and updates `data/learning/knowledge_loop_state.json`.
+OCO/Maker brackets, updates `data/learning/knowledge_loop_state.json`, and dispatches
+an institutional Telegram Executive Card.
 """
 from __future__ import annotations
 import json
-import math
 import os
 import sys
-import time
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
 
 from kucoin_client import KuCoinClient
-from sovereign_bots.core.coordinator import decide
-from sovereign_bots.bots.crypto import BOTS, VETO_IDS, get_coin_bot
+from sovereign_bots.bots.crypto import BOTS, get_coin_bot
 from sovereign_bots.core.knowledge_loop import load_knowledge_state, save_knowledge_state
-from src.ops.coordination import can_trade, append_intent
+from sovereign_bots.core.telegram_alerts import format_kucoin_cycle_card, send_institutional_telegram
+from src.ops.coordination import can_trade
 
 
-def run_cycle(execute: bool = True) -> Dict[str, Any]:
+def run_cycle(execute: bool = True, notify_telegram: bool = True) -> Dict[str, Any]:
     claim = can_trade("kucoin", "*", owner="hermes")
     if not claim.get("allowed"):
         return {"ok": False, "state": claim.get("state"), "reason": claim.get("reason")}
@@ -92,7 +91,7 @@ def run_cycle(execute: bool = True) -> Dict[str, Any]:
     k_state = load_knowledge_state()
     save_knowledge_state(k_state)
 
-    return {
+    summary = {
         "ok": True,
         "owner": "hermes",
         "committee_crypto_seats": len(BOTS),
@@ -105,6 +104,12 @@ def run_cycle(execute: bool = True) -> Dict[str, Any]:
         "active_stop_orders": len(stop_orders) - len(cleaned),
         "orphan_stops_cleaned": cleaned,
     }
+
+    if notify_telegram and (equity > 0 or cleaned):
+        card = format_kucoin_cycle_card(summary)
+        send_institutional_telegram(card, desk="HERMES-EDGE • KUCOIN MULTI-SERVICE DESK")
+
+    return summary
 
 
 if __name__ == "__main__":

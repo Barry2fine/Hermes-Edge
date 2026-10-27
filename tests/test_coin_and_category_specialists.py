@@ -1,7 +1,14 @@
+from __future__ import annotations
+import os, sys
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+VENDOR = os.path.join(ROOT, "vendor")
+if os.path.isdir(VENDOR) and VENDOR not in sys.path:
+    sys.path.insert(0, VENDOR)
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 """Unit tests for all 1,492 Per-Coin Specialist Bots, Multi-Service Allocators,
 11 Per-Category Polymarket Specialist Bots, and the Self-Improving Knowledge Loop."""
 
-from __future__ import annotations
 
 import os
 import tempfile

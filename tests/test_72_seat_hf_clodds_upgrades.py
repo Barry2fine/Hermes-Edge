@@ -1,6 +1,13 @@
+from __future__ import annotations
+import os, sys
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+VENDOR = os.path.join(ROOT, "vendor")
+if os.path.isdir(VENDOR) and VENDOR not in sys.path:
+    sys.path.insert(0, VENDOR)
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 """Unit tests for the 6 new AI/HF/CloddsBot/NOF0/SNR committee seats (72-seat expansion) and Free API Hub."""
 
-from __future__ import annotations
 import unittest
 from sovereign_bots.core.registry import domain_bots, all_bots
 from sovereign_bots.core.free_feeds import FREE_API_REGISTRY, list_free_feeds
@@ -17,10 +24,10 @@ class Test72SeatHFCloddsUpgrades(unittest.TestCase):
         c = domain_bots("crypto")
         p = domain_bots("polymarket")
         s = domain_bots("sports")
-        self.assertEqual(len(c), 30)
-        self.assertEqual(len(p), 18)
+        self.assertEqual(len(c), 50)
+        self.assertEqual(len(p), 29)
         self.assertEqual(len(s), 24)
-        self.assertEqual(len(all_bots()), 72)
+        self.assertEqual(len(all_bots()), 103)
 
     def test_kronos_kline_quantizer(self):
         bot = KronosKlineQuantizerBot()
@@ -59,7 +66,7 @@ class Test72SeatHFCloddsUpgrades(unittest.TestCase):
 
     def test_free_feeds_registry(self):
         feeds = list_free_feeds()
-        self.assertEqual(len(feeds), 8)
+        self.assertEqual(len(feeds), 14)
         self.assertIn("hyperliquid_info", FREE_API_REGISTRY)
         self.assertIn("kucoin_futures_public", FREE_API_REGISTRY)
         self.assertIn("polymarket_gamma", FREE_API_REGISTRY)
