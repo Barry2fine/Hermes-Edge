@@ -1,0 +1,6 @@
+{
+  "fee_drag_gate": 2.0,
+  "momentum": 2.0,
+  "risk_budget": 16.0,
+  "squeeze_gate": -2.0
+}

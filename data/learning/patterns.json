@@ -1,0 +1,93 @@
+{
+  "AVAX|short|bear_squeeze": {
+    "last_ts": "2026-10-27T17:54:41Z",
+    "lucky": 0,
+    "n": 5,
+    "poor": 0,
+    "smart": 5,
+    "tags": {}
+  },
+  "DOGE|short|bear_squeeze": {
+    "last_ts": "2026-10-27T17:54:41Z",
+    "lucky": 0,
+    "n": 3,
+    "poor": 0,
+    "smart": 1,
+    "tags": {
+      "target_unreachable": 2
+    }
+  },
+  "LINK|short|bear_squeeze": {
+    "last_ts": "2026-10-27T17:54:41Z",
+    "lucky": 0,
+    "n": 1,
+    "poor": 0,
+    "smart": 0,
+    "tags": {
+      "premature_exit": 1
+    }
+  },
+  "SEI|short|bear_squeeze": {
+    "last_ts": "2026-10-27T17:54:41Z",
+    "lucky": 0,
+    "n": 3,
+    "poor": 0,
+    "smart": 0,
+    "tags": {
+      "stop_too_tight": 3
+    }
+  },
+  "SOL|short|bear_squeeze": {
+    "last_ts": "2026-10-27T17:54:41Z",
+    "lucky": 0,
+    "n": 2,
+    "poor": 1,
+    "smart": 1,
+    "tags": {
+      "oversized": 1,
+      "target_unreachable": 1
+    }
+  },
+  "SUI|short|bear_squeeze": {
+    "last_ts": "2026-10-27T17:54:41Z",
+    "lucky": 0,
+    "n": 1,
+    "poor": 0,
+    "smart": 0,
+    "tags": {
+      "target_unreachable": 1
+    }
+  },
+  "TAO|short|bear_squeeze": {
+    "last_ts": "2026-10-27T17:54:41Z",
+    "lucky": 0,
+    "n": 3,
+    "poor": 0,
+    "smart": 0,
+    "tags": {
+      "premature_exit": 2,
+      "target_unreachable": 1
+    }
+  },
+  "XRP|short|bear_squeeze": {
+    "last_ts": "2026-10-27T17:54:41Z",
+    "lucky": 0,
+    "n": 3,
+    "poor": 0,
+    "smart": 2,
+    "tags": {
+      "target_unreachable": 1
+    }
+  },
+  "ZEC|short|bear_squeeze": {
+    "last_ts": "2026-10-27T17:54:41Z",
+    "lucky": 0,
+    "n": 6,
+    "poor": 6,
+    "smart": 0,
+    "tags": {
+      "oversized": 6,
+      "target_unreachable": 6
+    }
+  }
+}
