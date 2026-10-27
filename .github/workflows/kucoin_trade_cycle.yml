@@ -1,0 +1,49 @@
+name: Hermes-Edge KuCoin 27-Seat Trade Cycle
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: hermes-kucoin-cycle
+  cancel-in-progress: false
+
+jobs:
+  kucoin-cycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify Coordination Lock & 72-Seat Committee
+        run: |
+          python -B -c "
+          from src.ops.coordination import validate, can_trade
+          from sovereign_bots.core.registry import all_bots
+          v = validate()
+          assert v['ok'], v
+          c = can_trade('kucoin', '*', owner='hermes')
+          assert c['allowed'], c
+          assert len(all_bots()) == 72
+          print('PASS: coordination lock OK + 72-seat committee verified')
+          "
+
+      - name: Run KuCoin 27-Seat Trade Cycle
+        env:
+          PYTHONPATH: .
+          KUCOIN_API_KEY: ${{ secrets.KUCOIN_API_KEY }}
+          KUCOIN_API_SECRET: ${{ secrets.KUCOIN_API_SECRET }}
+          KUCOIN_API_PASSPHRASE: ${{ secrets.KUCOIN_API_PASSPHRASE }}
+          TRADE_MODE: live
+        run: |
+          if [ -n "$KUCOIN_API_KEY" ]; then
+            python -B kucoin_github_cycle.py
+          else
+            echo "KUCOIN_API_KEY secret not yet set in GitHub Actions; skipping live broker call."
+          fi
