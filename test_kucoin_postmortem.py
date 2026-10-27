@@ -86,6 +86,7 @@ class KuCoinPostmortemAndStepOffTests(unittest.TestCase):
             self.assertEqual(sc["momentum"], -3.0)
 
     def test_propr_stepped_off_in_autonomous_and_watchdog(self):
+        import os; os.makedirs('data/runtime', exist_ok=True); os.makedirs('logs', exist_ok=True)
         with mock.patch.object(autonomous_executor, "ProprClient", side_effect=AssertionError("ProprClient must not be called")):
             res = autonomous_executor.manage_and_execute_propr({}, [], set(), execute=True)
             self.assertTrue(res.get("disabled_by_owner"))

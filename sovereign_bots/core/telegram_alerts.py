@@ -486,3 +486,92 @@ def send_institutional_telegram(
         except Exception as second_err:
             print(f"[Telegram-Fallback] {text} (send failed: {type(first_err).__name__}/{type(second_err).__name__})")
             return {"ok": False, "error": type(second_err).__name__, "formatted": formatted}
+
+
+def format_polymarket_alert_card(
+    *,
+    desk: str = "SOVEREIGN AI • POLYMARKET 29-SEAT + 518-TAG DESK",
+    markets: Sequence[Dict[str, Any]],
+    total_scanned: int = 0,
+    active_tags: int = 518,
+    seats_count: int = 29,
+) -> str:
+    """Format an institutional Polymarket Gamma/CLOB & Kalshi Cross-Arb Executive Card."""
+    lines = [
+        f"🔮 <b>{_esc(desk)}</b>",
+        f"📡 <b>LIVE PREDICTION MARKET &amp; CLOB SCAN ({seats_count}-SEAT / {active_tags}-TAG)</b>",
+        DIVIDER,
+        f"• <b>Universe Scanned:</b> <code>{total_scanned} Active Markets</code> | <b>Committee:</b> <code>{seats_count} Seats</code>",
+    ]
+    if not markets:
+        lines.append("• <b>Status:</b> <code>No markets cleared the institutional fee + liquidity + Brier hurdle this cycle</code>")
+    else:
+        lines.append("• <b>Top Committee-Cleared Markets &amp; Implied Probabilities:</b>")
+        for idx, m in enumerate(markets[:5], 1):
+            q = _esc(str(m.get("question") or m.get("title") or "Market")[:68])
+            yes_p = float(m.get("yes_prob") or m.get("yes_price") or 0.0)
+            vol = float(m.get("volume_24h") or m.get("volume") or 0.0)
+            liq = float(m.get("liquidity") or 0.0)
+            cat_bot = _esc(m.get("category_bot_id") or "poly_universal_tag_router")
+            verdict = _esc(m.get("decision") or "ALLOW")
+            edge_bps = m.get("edge_bps")
+            edge_str = f" | Edge: <code>{edge_bps:+.0f} bps</code>" if isinstance(edge_bps, (int, float)) else ""
+            lines.append(
+                f"  <b>{idx}. {q}</b>\n"
+                f"     ▫️ YES: <code>{yes_p * 100:.1f}%</code> | 24h Vol: <code>${vol:,.0f}</code> | Liq: <code>${liq:,.0f}</code>{edge_str}\n"
+                f"     ▫️ Seat: <code>{cat_bot}</code> → <b>{verdict}</b>"
+            )
+    lines.extend([
+        DIVIDER,
+        f"⏱ <i>{now_toronto_str()}</i>",
+    ])
+    return "\n".join(lines)
+
+
+def format_sports_alert_card(
+    *,
+    desk: str = "SOVEREIGN AI • BET365 ONTARIO 24-SEAT SPORTS DESK",
+    edges: Sequence[Dict[str, Any]],
+    total_events_scanned: int = 0,
+    seats_count: int = 24,
+    parlay_summary: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Format an institutional Sports Betting (bet365 Ontario + Pinnacle De-Vig + ESPN) Executive Card."""
+    lines = [
+        f"🏆 <b>{_esc(desk)}</b>",
+        f"📊 <b>LIVE SHARP DE-VIG &amp; EV SCAN ({seats_count}-SEAT COMMITTEE)</b>",
+        DIVIDER,
+        f"• <b>Events Audited:</b> <code>{total_events_scanned} Live/Upcoming Matchups</code> | <b>Committee:</b> <code>{seats_count} Seats</code>",
+    ]
+    if not edges:
+        lines.append("• <b>Status:</b> <code>No legs cleared the post-vig EV + Pinnacle steam gate this cycle</code>")
+    else:
+        lines.append("• <b>Top Committee-Approved Value Legs:</b>")
+        for idx, e in enumerate(edges[:6], 1):
+            matchup = _esc(e.get("matchup") or e.get("event") or "Matchup")
+            pick = _esc(e.get("pick") or e.get("selection") or "Selection")
+            book = _esc(e.get("book") or "bet365 ON / Sharp")
+            dec_odds = float(e.get("decimal_odds") or 1.91)
+            am_odds = _esc(e.get("american_odds") or "")
+            fair_p = float(e.get("fair_prob") or 0.524)
+            ev_pct = float(e.get("ev_pct") or 0.0)
+            kelly_u = float(e.get("quarter_kelly_units") or 0.25)
+            odds_label = f"{dec_odds:.2f} ({am_odds})" if am_odds else f"{dec_odds:.2f}"
+            lines.append(
+                f"  <b>{idx}. {matchup}</b> — <code>{pick}</code>\n"
+                f"     ▫️ Line: <code>{odds_label}</code> [{book}] | Fair: <code>{fair_p * 100:.1f}%</code> | EV: <code>{ev_pct:+.2f}%</code> | ¼-Kelly: <code>{kelly_u:.2f}u</code>"
+            )
+    if parlay_summary:
+        p_legs = parlay_summary.get("legs_count", len(edges))
+        p_dec = float(parlay_summary.get("combined_decimal_odds") or 1.0)
+        p_prob = float(parlay_summary.get("combined_fair_prob") or 0.0)
+        p_ev = float(parlay_summary.get("combined_ev_pct") or 0.0)
+        lines.append(
+            f"• <b>Copula SGP / Parlay Ticket ({p_legs}-Leg):</b> "
+            f"Odds <code>{p_dec:.2f}x</code> | True Win: <code>{p_prob * 100:.2f}%</code> | Ticket EV: <code>{p_ev:+.2f}%</code>"
+        )
+    lines.extend([
+        DIVIDER,
+        f"⏱ <i>{now_toronto_str()}</i>",
+    ])
+    return "\n".join(lines)

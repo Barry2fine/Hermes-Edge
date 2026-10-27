@@ -91,3 +91,53 @@ class TestInstitutionalTelegramAlerts(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_format_polymarket_and_sports_cards():
+    from sovereign_bots.core.telegram_alerts import (
+        format_polymarket_alert_card,
+        format_sports_alert_card,
+    )
+
+    poly_msg = format_polymarket_alert_card(
+        markets=[
+            {
+                "question": "Will Bitcoin reach $100k in 2026?",
+                "yes_prob": 0.64,
+                "volume_24h": 425000,
+                "liquidity": 180000,
+                "category_bot_id": "poly_cat_crypto_prices",
+                "decision": "ALLOW",
+                "edge_bps": 35.0,
+            }
+        ],
+        total_scanned=40,
+    )
+    assert "POLYMARKET" in poly_msg
+    assert "Will Bitcoin reach $100k" in poly_msg
+    assert "poly_cat_crypto_prices" in poly_msg
+
+    sports_msg = format_sports_alert_card(
+        edges=[
+            {
+                "matchup": "[NBA] NYK @ BOS",
+                "pick": "BOS -4.5 | O/U 224.5",
+                "book": "bet365 ON",
+                "decimal_odds": 1.91,
+                "american_odds": "-110",
+                "fair_prob": 0.545,
+                "ev_pct": 4.10,
+                "quarter_kelly_units": 0.55,
+            }
+        ],
+        total_events_scanned=14,
+        parlay_summary={
+            "legs_count": 6,
+            "combined_decimal_odds": 24.85,
+            "combined_fair_prob": 0.048,
+            "combined_ev_pct": 19.28,
+        },
+    )
+    assert "BET365 ONTARIO" in sports_msg
+    assert "NYK @ BOS" in sports_msg
+    assert "Copula SGP / Parlay Ticket" in sports_msg

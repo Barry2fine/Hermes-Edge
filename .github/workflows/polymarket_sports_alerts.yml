@@ -1,0 +1,33 @@
+name: Polymarket (29-Seat) & Sports Betting (24-Seat) Telegram Alerts
+
+on:
+  schedule:
+    # Runs every 2 hours on GitHub Actions to keep Barry updated at zero Grok Bot usage
+    - cron: '15 */2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: polymarket-sports-telegram-alerts
+  cancel-in-progress: false
+
+jobs:
+  polymarket-sports-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run 29-Seat Polymarket & 24-Seat Sports Betting Scan + Telegram Dispatch
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          THE_ODDS_API_KEY: ${{ secrets.THE_ODDS_API_KEY }}
+          SEND_TELEGRAM: '1'
+        run: |
+          python3 polymarket_sports_github_cycle.py
