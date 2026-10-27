@@ -21,5 +21,5 @@ jobs:
         run: pip install -r requirements.txt pytest
       - name: Run 28-Test Engine Safety & Diagnostics Suite
         run: python test_engine_safety_and_diagnostics.py -v
-      - name: Run 3-Test KuCoin MFE/MAE Postmortem & Propr Step-Off Suite
-        run: python test_kucoin_postmortem.py -v
+      - name: Run isolated offline alert and postmortem regressions
+        run: python -B tests/run_offline_repairs.py
