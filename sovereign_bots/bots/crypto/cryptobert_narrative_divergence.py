@@ -33,7 +33,7 @@ class CryptoBertNarrativeDivergenceBot(Bot):
         sentiment = _num(ctx.get("cryptobert_sentiment"))
         cvd_z = _num(ctx.get("cvd_zscore"))
         direction = str(ctx.get("direction") or "").lower()
-        candles = ctx.get("candles")
+        candles = ctx.get("candles") or ctx.get("candles_1h") or ctx.get("candles_15m")
 
         if (sentiment is None or cvd_z is None) and isinstance(candles, list) and len(candles) >= 5 and direction in ("long", "short"):
             sentiment = 0.25 if direction == "long" else -0.25

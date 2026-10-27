@@ -33,7 +33,7 @@ class ChronosConformalIntervalBot(Bot):
         q50_r = _num(ctx.get("chronos_q50_r"))
         adverse_q_r = _num(ctx.get("chronos_adverse_q_r"))
         conformal_width_r = _num(ctx.get("chronos_width_r"))
-        candles = ctx.get("candles")
+        candles = ctx.get("candles") or ctx.get("candles_1h") or ctx.get("candles_15m")
 
         if q50_r is None and adverse_q_r is None:
             if isinstance(candles, list) and len(candles) >= 10:
