@@ -1,10 +1,11 @@
-"""Polymarket bot pack: 17 independent votes over one prediction-market context (6 Hard VETO + 11 Soft/Edge)."""
+"""Polymarket bot pack: 18 independent votes over one prediction-market context (6 Hard VETO + 12 Soft/Edge)."""
 
 from __future__ import annotations
 
 from .barrier import BarrierBot
 from .calibration_drift import CalibrationDriftBot
 from .carry import CarryBot
+from .clodds_synthetic_implied_arb import CloddsSyntheticImpliedArbBot
 from .crosslink import CrosslinkBot
 from .fee_hurdle import FeeHurdleBot
 from .kalshi_cross_arb import KalshiPolymarketCrossArbBot
@@ -38,6 +39,7 @@ BOTS = [
     KalshiPolymarketCrossArbBot(),
     MartingaleBeliefVolatilityBot(),
     SmartMoneyOrderbookSweepBot(),
+    CloddsSyntheticImpliedArbBot(),
 ]
 
 __all__ = [
@@ -47,4 +49,5 @@ __all__ = [
     "WhaleConsensusBot", "FeeHurdleBot", "CarryBot", "ResolutionClarityBot",
     "TimeDecayBot", "PolymarketPostmortemBot", "KalshiPolymarketCrossArbBot",
     "MartingaleBeliefVolatilityBot", "SmartMoneyOrderbookSweepBot",
+    "CloddsSyntheticImpliedArbBot",
 ]

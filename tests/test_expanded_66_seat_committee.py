@@ -20,10 +20,10 @@ from sovereign_bots.bots.polymarket import (
 
 class Expanded66SeatTests(unittest.TestCase):
     def test_total_roster_is_66_seats(self):
-        self.assertEqual(len(domain_bots("crypto")), 26)
-        self.assertEqual(len(domain_bots("sports")), 23)
-        self.assertEqual(len(domain_bots("polymarket")), 17)
-        self.assertEqual(len(all_bots()), 66)
+        self.assertEqual(len(domain_bots("crypto")), 30)
+        self.assertEqual(len(domain_bots("sports")), 24)
+        self.assertEqual(len(domain_bots("polymarket")), 18)
+        self.assertEqual(len(all_bots()), 72)
 
     def test_crypto_hard_veto_seats(self):
         # 1. FundingSettlementTrapBot

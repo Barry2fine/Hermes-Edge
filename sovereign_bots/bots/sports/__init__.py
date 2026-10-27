@@ -1,7 +1,8 @@
-"""Sports bot pack: 23 independent votes over one market context (7 Hard VETO + 16 Soft/Edge)."""
+"""Sports bot pack: 24 independent votes over one market context (7 Hard VETO + 17 Soft/Edge)."""
 
 from __future__ import annotations
 
+from .bonus_bet_snr_optimizer import BonusBetSNROptimizerBot
 from .calibration_drift import CalibrationDriftBot
 from .circadian import CircadianBot
 from .clv import CLVBot
@@ -50,6 +51,7 @@ BOTS = [
     PinnacleDevigSharpSteamBot(),
     InjuryUsageRedistributionBot(),
     StudentTCopulaSGPBot(),
+    BonusBetSNROptimizerBot(),
 ]
 
 BOT_IDS = [b.id for b in BOTS]
@@ -73,4 +75,5 @@ __all__ = [
     "ScheduleSpotBot", "CalibrationDriftBot", "TimingBot",
     "JuiceAndVigCeilingBot", "SmallSampleOverfitBot", "SportsPostmortemBot",
     "PinnacleDevigSharpSteamBot", "InjuryUsageRedistributionBot", "StudentTCopulaSGPBot",
+    "BonusBetSNROptimizerBot",
 ]

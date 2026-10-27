@@ -25,7 +25,11 @@
     "cross_venue_lead_lag",
     "options_gex_skew",
     "liquidation_oi",
-    "candle_geometry_tensor"
+    "candle_geometry_tensor",
+    "chronos_conformal_interval",
+    "cryptobert_narrative_divergence",
+    "kronos_kline_quantizer",
+    "nof0_arena_sortino_decay"
   ],
   "polymarket": [
     "barrier",
@@ -44,7 +48,8 @@
     "polymarket_postmortem",
     "kalshi_cross_arb",
     "martingale_belief_vol",
-    "orderbook_sweep_velocity"
+    "orderbook_sweep_velocity",
+    "clodds_synthetic_implied_arb"
   ],
   "sports": [
     "elo",
@@ -69,6 +74,7 @@
     "sports_postmortem",
     "pinnacle_devig_steam",
     "usage_redistribution",
-    "copula_sgp"
+    "copula_sgp",
+    "bonus_bet_snr_optimizer"
   ]
 }
