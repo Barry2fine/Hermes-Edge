@@ -1,10 +1,27 @@
-"""Polymarket bot pack: 18 independent votes over one prediction-market context (6 Hard VETO + 12 Soft/Edge)."""
+"""Polymarket bot pack: 29 independent votes over one prediction-market context (6 Hard VETO + 23 Soft/Edge)."""
 
 from __future__ import annotations
 
 from .barrier import BarrierBot
 from .calibration_drift import CalibrationDriftBot
 from .carry import CarryBot
+from .category_specialists import (
+    POLY_CATEGORY_BOTS,
+    POLY_CATEGORY_CLASSES,
+    TAG_TO_CANONICAL_CATEGORY,
+    PolyAiTechCategoryBot,
+    PolyCryptoCategoryBot,
+    PolyEarningsIpoCategoryBot,
+    PolyEntertainmentCategoryBot,
+    PolyGeopoliticsCategoryBot,
+    PolyMacroCategoryBot,
+    PolyPoliticsCategoryBot,
+    PolyRegulatoryCategoryBot,
+    PolySportsCategoryBot,
+    PolyUniversalTagRouterBot,
+    PolyWeatherCategoryBot,
+    resolve_canonical_category,
+)
 from .clodds_synthetic_implied_arb import CloddsSyntheticImpliedArbBot
 from .crosslink import CrosslinkBot
 from .fee_hurdle import FeeHurdleBot
@@ -40,14 +57,20 @@ BOTS = [
     MartingaleBeliefVolatilityBot(),
     SmartMoneyOrderbookSweepBot(),
     CloddsSyntheticImpliedArbBot(),
+    *POLY_CATEGORY_BOTS,
 ]
 
 __all__ = [
     "BOTS",
+    "POLY_CATEGORY_BOTS", "POLY_CATEGORY_CLASSES", "TAG_TO_CANONICAL_CATEGORY", "resolve_canonical_category",
     "BarrierBot", "TaxonomyBot", "ResolutionBot", "LiquidityBot",
     "CalibrationDriftBot", "CrosslinkBot", "MotivationBot", "PublicBiasBot",
     "WhaleConsensusBot", "FeeHurdleBot", "CarryBot", "ResolutionClarityBot",
     "TimeDecayBot", "PolymarketPostmortemBot", "KalshiPolymarketCrossArbBot",
     "MartingaleBeliefVolatilityBot", "SmartMoneyOrderbookSweepBot",
     "CloddsSyntheticImpliedArbBot",
+    "PolyCryptoCategoryBot", "PolyPoliticsCategoryBot", "PolyMacroCategoryBot",
+    "PolyGeopoliticsCategoryBot", "PolySportsCategoryBot", "PolyAiTechCategoryBot",
+    "PolyEarningsIpoCategoryBot", "PolyRegulatoryCategoryBot", "PolyWeatherCategoryBot",
+    "PolyEntertainmentCategoryBot", "PolyUniversalTagRouterBot",
 ]

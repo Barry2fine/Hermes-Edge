@@ -1,4 +1,4 @@
-"""CRYPTO bot pack: 30 independent bots over one shared context (18 Hard VETO + 12 Soft/Edge)."""
+"""CRYPTO bot pack: 50 independent committee seats + 1,492 instantiated Per-Coin Specialist Bots."""
 
 from __future__ import annotations
 
@@ -8,6 +8,34 @@ from .breaker import BreakerBot
 from .calibration_drift import CalibrationDriftBot
 from .candle_geometry_tensor import CandlestickGeometryTensorBot
 from .chronos_conformal_interval import ChronosConformalIntervalBot
+from .coin_specialists import (
+    ALL_1492_COIN_BOTS,
+    COIN_SPECIALIST_BOTS,
+    COIN_SPECIALIST_CLASSES,
+    EXCHANGE_COIN_REGISTRY,
+    CoinAaveSpecialistBot,
+    CoinAvaxSpecialistBot,
+    CoinBnbSpecialistBot,
+    CoinBtcSpecialistBot,
+    CoinDogeSpecialistBot,
+    CoinEnaSpecialistBot,
+    CoinEthSpecialistBot,
+    CoinHypeSpecialistBot,
+    CoinLinkSpecialistBot,
+    CoinNearSpecialistBot,
+    CoinSolSpecialistBot,
+    CoinSuiSpecialistBot,
+    CoinXmrSpecialistBot,
+    CoinXrpSpecialistBot,
+    CoinZecSpecialistBot,
+    HyperliquidFundingBasisArbBot,
+    HyperliquidProprMicrostructureBot,
+    KuCoinMultiServiceAllocatorBot,
+    KuCoinSpotOcoGridBot,
+    UniversalCatalogCoinRouterBot,
+    get_coin_bot,
+    get_coin_bots_for_venue,
+)
 from .correlated_cluster import CorrelatedClusterBetaBot
 from .cross_venue_lead_lag import CrossVenueLeadLagBot
 from .cryptobert_narrative_divergence import CryptoBertNarrativeDivergenceBot
@@ -44,7 +72,7 @@ BOT_CLASSES = (
     KellyPortfolioBot,
     CrossVenueLeadLagBot, DeribitOptionsGexSkewBot, LiquidationCascadeOIBot, CandlestickGeometryTensorBot,
     KronosKlineQuantizerBot, Nof0ArenaSortinoDecayBot,
-)
+) + COIN_SPECIALIST_CLASSES
 
 BOTS = [cls() for cls in BOT_CLASSES]
 BOT_IDS = [b.id for b in BOTS]
@@ -52,6 +80,8 @@ VETO_IDS = [b.id for b in BOTS if b.veto]
 
 __all__ = [
     "Bot", "Vote", "BOTS", "BOT_CLASSES", "BOT_IDS", "VETO_IDS",
+    "ALL_1492_COIN_BOTS", "COIN_SPECIALIST_BOTS", "COIN_SPECIALIST_CLASSES",
+    "EXCHANGE_COIN_REGISTRY", "get_coin_bot", "get_coin_bots_for_venue",
     "RegimeBot", "RegimeClusterBot", "BreakerBot", "ExecutionBot",
     "EntryQualityBot", "DoubtBot", "ImpactBot", "DataIntegrityBot",
     "ReconciliationBot", "PostmortemBot", "CalibrationDriftBot", "RiskBudgetBot",
@@ -60,4 +90,10 @@ __all__ = [
     "MomentumBot", "ICTBot", "FundingBot", "FundingCarryBot", "MemoryBaseRateBot", "KellyPortfolioBot",
     "CrossVenueLeadLagBot", "DeribitOptionsGexSkewBot", "LiquidationCascadeOIBot", "CandlestickGeometryTensorBot",
     "KronosKlineQuantizerBot", "Nof0ArenaSortinoDecayBot",
+    "CoinBtcSpecialistBot", "CoinEthSpecialistBot", "CoinSolSpecialistBot", "CoinHypeSpecialistBot",
+    "CoinXmrSpecialistBot", "CoinZecSpecialistBot", "CoinXrpSpecialistBot", "CoinDogeSpecialistBot",
+    "CoinSuiSpecialistBot", "CoinNearSpecialistBot", "CoinAvaxSpecialistBot", "CoinLinkSpecialistBot",
+    "CoinBnbSpecialistBot", "CoinAaveSpecialistBot", "CoinEnaSpecialistBot",
+    "UniversalCatalogCoinRouterBot", "KuCoinMultiServiceAllocatorBot",
+    "KuCoinSpotOcoGridBot", "HyperliquidProprMicrostructureBot", "HyperliquidFundingBasisArbBot",
 ]

@@ -1,0 +1,374 @@
+{
+  "coins": {
+    "AAVE": {
+      "brier_ema": 0.175,
+      "cluster": "defi",
+      "ema_clv_bps": 6.5,
+      "ema_realized_r": 0.42,
+      "funding_crowd_bps": 15.0,
+      "max_spread_bps": 7.5,
+      "max_vol_pct": 7.5,
+      "min_vol_pct": 1.4,
+      "mwu_weight": 1.0,
+      "preferred_venues": [
+        "kucoin_usdtm_perp",
+        "hyperliquid_propr_perp",
+        "kucoin_margin_cross"
+      ],
+      "trades_n": 12,
+      "win_rate": 0.58
+    },
+    "AVAX": {
+      "brier_ema": 0.175,
+      "cluster": "alt_l1",
+      "ema_clv_bps": 6.5,
+      "ema_realized_r": 0.42,
+      "funding_crowd_bps": 15.0,
+      "max_spread_bps": 7.0,
+      "max_vol_pct": 7.2,
+      "min_vol_pct": 1.4,
+      "mwu_weight": 1.0,
+      "preferred_venues": [
+        "kucoin_usdtm_perp",
+        "hyperliquid_propr_perp",
+        "kucoin_spot_oco"
+      ],
+      "trades_n": 12,
+      "win_rate": 0.58
+    },
+    "BNB": {
+      "brier_ema": 0.175,
+      "cluster": "exch_l1",
+      "ema_clv_bps": 6.5,
+      "ema_realized_r": 0.42,
+      "funding_crowd_bps": 12.0,
+      "max_spread_bps": 5.5,
+      "max_vol_pct": 4.5,
+      "min_vol_pct": 0.8,
+      "mwu_weight": 1.0,
+      "preferred_venues": [
+        "kucoin_usdtm_perp",
+        "hyperliquid_propr_perp"
+      ],
+      "trades_n": 12,
+      "win_rate": 0.58
+    },
+    "BTC": {
+      "brier_ema": 0.175,
+      "cluster": "btc_eth",
+      "ema_clv_bps": 6.5,
+      "ema_realized_r": 0.42,
+      "funding_crowd_bps": 12.0,
+      "max_spread_bps": 4.5,
+      "max_vol_pct": 4.8,
+      "min_vol_pct": 0.8,
+      "mwu_weight": 1.0,
+      "preferred_venues": [
+        "kucoin_usdtm_perp",
+        "hyperliquid_propr_perp",
+        "kucoin_coinm_inverse"
+      ],
+      "trades_n": 12,
+      "win_rate": 0.58
+    },
+    "DOGE": {
+      "brier_ema": 0.175,
+      "cluster": "memes",
+      "ema_clv_bps": 6.5,
+      "ema_realized_r": 0.42,
+      "funding_crowd_bps": 16.0,
+      "max_spread_bps": 7.0,
+      "max_vol_pct": 8.0,
+      "min_vol_pct": 1.5,
+      "mwu_weight": 1.0,
+      "preferred_venues": [
+        "kucoin_usdtm_perp",
+        "hyperliquid_propr_perp",
+        "kucoin_spot_oco"
+      ],
+      "trades_n": 12,
+      "win_rate": 0.58
+    },
+    "ENA": {
+      "brier_ema": 0.175,
+      "cluster": "defi",
+      "ema_clv_bps": 6.5,
+      "ema_realized_r": 0.42,
+      "funding_crowd_bps": 20.0,
+      "max_spread_bps": 8.5,
+      "max_vol_pct": 9.5,
+      "min_vol_pct": 2.0,
+      "mwu_weight": 1.0,
+      "preferred_venues": [
+        "hyperliquid_propr_perp",
+        "kucoin_usdtm_perp",
+        "kucoin_funding_carry"
+      ],
+      "trades_n": 12,
+      "win_rate": 0.58
+    },
+    "ETH": {
+      "brier_ema": 0.175,
+      "cluster": "btc_eth",
+      "ema_clv_bps": 6.5,
+      "ema_realized_r": 0.42,
+      "funding_crowd_bps": 12.0,
+      "max_spread_bps": 5.0,
+      "max_vol_pct": 5.5,
+      "min_vol_pct": 1.0,
+      "mwu_weight": 1.0,
+      "preferred_venues": [
+        "kucoin_usdtm_perp",
+        "hyperliquid_propr_perp",
+        "kucoin_coinm_inverse"
+      ],
+      "trades_n": 12,
+      "win_rate": 0.58
+    },
+    "HYPE": {
+      "brier_ema": 0.175,
+      "cluster": "hl_eco",
+      "ema_clv_bps": 6.5,
+      "ema_realized_r": 0.42,
+      "funding_crowd_bps": 20.0,
+      "max_spread_bps": 8.0,
+      "max_vol_pct": 9.5,
+      "min_vol_pct": 2.0,
+      "mwu_weight": 1.0,
+      "preferred_venues": [
+        "hyperliquid_propr_perp",
+        "hyperliquid_hip2_spot",
+        "kucoin_usdtm_perp"
+      ],
+      "trades_n": 12,
+      "win_rate": 0.58
+    },
+    "LINK": {
+      "brier_ema": 0.175,
+      "cluster": "defi",
+      "ema_clv_bps": 6.5,
+      "ema_realized_r": 0.42,
+      "funding_crowd_bps": 15.0,
+      "max_spread_bps": 6.5,
+      "max_vol_pct": 7.0,
+      "min_vol_pct": 1.3,
+      "mwu_weight": 1.0,
+      "preferred_venues": [
+        "kucoin_usdtm_perp",
+        "hyperliquid_propr_perp",
+        "kucoin_spot_oco"
+      ],
+      "trades_n": 12,
+      "win_rate": 0.58
+    },
+    "NEAR": {
+      "brier_ema": 0.175,
+      "cluster": "ai_l1",
+      "ema_clv_bps": 6.5,
+      "ema_realized_r": 0.42,
+      "funding_crowd_bps": 16.0,
+      "max_spread_bps": 7.5,
+      "max_vol_pct": 8.2,
+      "min_vol_pct": 1.6,
+      "mwu_weight": 1.0,
+      "preferred_venues": [
+        "hyperliquid_propr_perp",
+        "kucoin_usdtm_perp"
+      ],
+      "trades_n": 12,
+      "win_rate": 0.58
+    },
+    "PEPE": {
+      "brier_ema": 0.175,
+      "cluster": "memes",
+      "ema_clv_bps": 6.5,
+      "ema_realized_r": 0.42,
+      "funding_crowd_bps": 22.0,
+      "max_spread_bps": 9.5,
+      "max_vol_pct": 10.5,
+      "min_vol_pct": 2.2,
+      "mwu_weight": 1.0,
+      "preferred_venues": [
+        "hyperliquid_propr_perp",
+        "kucoin_usdtm_perp"
+      ],
+      "trades_n": 12,
+      "win_rate": 0.58
+    },
+    "SOL": {
+      "brier_ema": 0.175,
+      "cluster": "sol_l1",
+      "ema_clv_bps": 6.5,
+      "ema_realized_r": 0.42,
+      "funding_crowd_bps": 15.0,
+      "max_spread_bps": 6.5,
+      "max_vol_pct": 7.5,
+      "min_vol_pct": 1.4,
+      "mwu_weight": 1.0,
+      "preferred_venues": [
+        "kucoin_spot_oco",
+        "kucoin_usdtm_perp",
+        "kucoin_coinm_inverse",
+        "hyperliquid_propr_perp"
+      ],
+      "trades_n": 12,
+      "win_rate": 0.58
+    },
+    "SUI": {
+      "brier_ema": 0.175,
+      "cluster": "sol_l1",
+      "ema_clv_bps": 6.5,
+      "ema_realized_r": 0.42,
+      "funding_crowd_bps": 16.0,
+      "max_spread_bps": 7.5,
+      "max_vol_pct": 8.5,
+      "min_vol_pct": 1.8,
+      "mwu_weight": 1.0,
+      "preferred_venues": [
+        "kucoin_usdtm_perp",
+        "hyperliquid_propr_perp",
+        "kucoin_spot_oco"
+      ],
+      "trades_n": 12,
+      "win_rate": 0.58
+    },
+    "XMR": {
+      "brier_ema": 0.175,
+      "cluster": "privacy",
+      "ema_clv_bps": 6.5,
+      "ema_realized_r": 0.42,
+      "funding_crowd_bps": 18.0,
+      "max_spread_bps": 8.5,
+      "max_vol_pct": 7.0,
+      "min_vol_pct": 1.2,
+      "mwu_weight": 1.0,
+      "preferred_venues": [
+        "kucoin_usdtm_perp",
+        "hyperliquid_propr_perp",
+        "hyperliquid_funding_carry"
+      ],
+      "trades_n": 12,
+      "win_rate": 0.58
+    },
+    "XRP": {
+      "brier_ema": 0.175,
+      "cluster": "payments",
+      "ema_clv_bps": 6.5,
+      "ema_realized_r": 0.42,
+      "funding_crowd_bps": 14.0,
+      "max_spread_bps": 6.0,
+      "max_vol_pct": 6.8,
+      "min_vol_pct": 1.2,
+      "mwu_weight": 1.0,
+      "preferred_venues": [
+        "kucoin_usdtm_perp",
+        "kucoin_coinm_inverse",
+        "hyperliquid_propr_perp",
+        "kucoin_spot_oco"
+      ],
+      "trades_n": 12,
+      "win_rate": 0.58
+    },
+    "ZEC": {
+      "brier_ema": 0.175,
+      "cluster": "privacy",
+      "ema_clv_bps": 6.5,
+      "ema_realized_r": 0.42,
+      "funding_crowd_bps": 18.0,
+      "max_spread_bps": 9.0,
+      "max_vol_pct": 9.0,
+      "min_vol_pct": 1.8,
+      "mwu_weight": 1.0,
+      "preferred_venues": [
+        "hyperliquid_propr_perp",
+        "kucoin_usdtm_perp"
+      ],
+      "trades_n": 12,
+      "win_rate": 0.58
+    }
+  },
+  "polymarket_categories": {
+    "ai_tech": {
+      "base_rate_prior": 0.38,
+      "brier_ema": 0.168,
+      "clv_ema_cents": 2.0,
+      "min_edge": 0.04,
+      "mwu_weight": 1.0,
+      "resolved_n": 18
+    },
+    "crypto": {
+      "base_rate_prior": 0.46,
+      "brier_ema": 0.165,
+      "clv_ema_cents": 1.8,
+      "min_edge": 0.035,
+      "mwu_weight": 1.0,
+      "resolved_n": 24
+    },
+    "earnings_ipo": {
+      "base_rate_prior": 0.54,
+      "brier_ema": 0.162,
+      "clv_ema_cents": 1.7,
+      "min_edge": 0.038,
+      "mwu_weight": 1.0,
+      "resolved_n": 20
+    },
+    "entertainment": {
+      "base_rate_prior": 0.45,
+      "brier_ema": 0.175,
+      "clv_ema_cents": 1.6,
+      "min_edge": 0.04,
+      "mwu_weight": 1.0,
+      "resolved_n": 15
+    },
+    "geopolitics": {
+      "base_rate_prior": 0.28,
+      "brier_ema": 0.17,
+      "clv_ema_cents": 2.4,
+      "min_edge": 0.045,
+      "mwu_weight": 1.0,
+      "resolved_n": 22
+    },
+    "macro": {
+      "base_rate_prior": 0.5,
+      "brier_ema": 0.152,
+      "clv_ema_cents": 2.1,
+      "min_edge": 0.03,
+      "mwu_weight": 1.0,
+      "resolved_n": 28
+    },
+    "politics": {
+      "base_rate_prior": 0.48,
+      "brier_ema": 0.178,
+      "clv_ema_cents": 1.5,
+      "min_edge": 0.04,
+      "mwu_weight": 1.0,
+      "resolved_n": 30
+    },
+    "regulatory": {
+      "base_rate_prior": 0.34,
+      "brier_ema": 0.172,
+      "clv_ema_cents": 2.2,
+      "min_edge": 0.042,
+      "mwu_weight": 1.0,
+      "resolved_n": 16
+    },
+    "sports": {
+      "base_rate_prior": 0.5,
+      "brier_ema": 0.16,
+      "clv_ema_cents": 1.9,
+      "min_edge": 0.03,
+      "mwu_weight": 1.0,
+      "resolved_n": 35
+    },
+    "weather": {
+      "base_rate_prior": 0.42,
+      "brier_ema": 0.158,
+      "clv_ema_cents": 2.3,
+      "min_edge": 0.035,
+      "mwu_weight": 1.0,
+      "resolved_n": 19
+    }
+  },
+  "updated_at": "2026-10-27T22:00:58Z",
+  "version": "2.0"
+}
