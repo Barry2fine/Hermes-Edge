@@ -3,6 +3,7 @@
 from __future__ import annotations
 from typing import Any, Dict, Optional
 from ...core.bot import Bot, Vote
+from ...core.institutional_risk_governor import compute_l2_kyle_lambda_and_vpin_routing
 
 
 def _num(x: Any) -> Optional[float]:
@@ -28,21 +29,38 @@ class VpinToxicFlowBot(Bot):
         direction = str(ctx.get("direction") or "").lower()
         bids = ctx.get("bids")
         asks = ctx.get("asks")
+        routing_meta: Dict[str, Any] = {}
 
-        if eobi is None and isinstance(bids, list) and isinstance(asks, list) and bids and asks:
+        if isinstance(bids, list) and isinstance(asks, list) and bids and asks:
             try:
-                b_vol = sum(float(x[1]) for x in bids[:5] if isinstance(x, (list, tuple)) and len(x) >= 2)
-                a_vol = sum(float(x[1]) for x in asks[:5] if isinstance(x, (list, tuple)) and len(x) >= 2)
-                if (b_vol + a_vol) > 0:
-                    eobi = (b_vol - a_vol) / (b_vol + a_vol)
+                notional = float(_num(ctx.get("order_notional_usd")) or 1000.0)
+                r_info = compute_l2_kyle_lambda_and_vpin_routing(
+                    bids=bids,
+                    asks=asks,
+                    side=direction or "long",
+                    order_notional_usd=notional,
+                )
+                routing_meta = {
+                    "kyle_lambda_bps_per_10k": r_info.get("kyle_lambda_bps_per_10k"),
+                    "routing_decision": r_info.get("routing_decision"),
+                    "recommended_post_only_px": r_info.get("recommended_post_only_px"),
+                }
+                if eobi is None:
+                    eobi = r_info.get("eobi")
             except Exception:
-                pass
+                try:
+                    b_vol = sum(float(x[1]) for x in bids[:5] if isinstance(x, (list, tuple)) and len(x) >= 2)
+                    a_vol = sum(float(x[1]) for x in asks[:5] if isinstance(x, (list, tuple)) and len(x) >= 2)
+                    if (b_vol + a_vol) > 0:
+                        eobi = (b_vol - a_vol) / (b_vol + a_vol)
+                except Exception:
+                    pass
 
         if vpin is None and eobi is None:
             return Vote(self.id, "reject", 0.0, ["missing_vpin_and_orderbook_telemetry"], {})
 
         reasons = []
-        evidence = {"vpin": vpin, "eobi": eobi, "direction": direction}
+        evidence = {"vpin": vpin, "eobi": eobi, "direction": direction, **routing_meta}
 
         if vpin is not None and vpin > 0.72:
             reasons.append(f"toxic_orderflow_vpin:{vpin:.3f}>0.72")
