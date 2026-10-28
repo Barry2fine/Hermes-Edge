@@ -1,7 +1,7 @@
 name: Hermes-Edge KuCoin 50-Seat + 1492-Coin Trade Cycle
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 concurrency:

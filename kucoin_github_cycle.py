@@ -24,6 +24,57 @@ from sovereign_bots.core.knowledge_loop import load_knowledge_state, save_knowle
 from sovereign_bots.core.telegram_alerts import format_kucoin_cycle_card, send_institutional_telegram
 from src.ops.coordination import can_trade
 
+
+import time
+from collections import deque
+
+def sample_1s_multi_domain_stream(duration_s: int = 12) -> Dict[str, Any]:
+    """Stream live 1-second (1 Hz) price ticks across all perp markets + pull DexScreener, Polymarket, CoinGecko & Fear/Greed."""
+    tape: Dict[str, deque] = {}
+    for i in range(max(1, duration_s)):
+        t0 = time.time()
+        try:
+            req = urllib.request.Request(
+                "https://api.hyperliquid.xyz/info",
+                data=json.dumps({"type": "allMids"}).encode("utf-8"),
+                headers={"Content-Type": "application/json", "User-Agent": "Hermes1sStream/6.0"},
+            )
+            with urllib.request.urlopen(req, timeout=3.0) as r:
+                mids = json.loads(r.read().decode("utf-8"))
+            now = time.time()
+            if isinstance(mids, dict):
+                for c, px_s in mids.items():
+                    try:
+                        tape.setdefault(c, deque(maxlen=120)).append((now, float(px_s)))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        dt = time.time() - t0
+        if i < duration_s - 1 and dt < 1.0:
+            time.sleep(max(0.05, 1.0 - dt))
+
+    vel_top = {}
+    for c, dq in tape.items():
+        if len(dq) >= 2 and dq[0][1] > 0:
+            vb = (dq[-1][1] - dq[0][1]) / dq[0][1] * 10000.0
+            vel_top[c] = round(vb, 2)
+
+    domains = {"stream_1hz_coins": len(tape), "stream_seconds": duration_s, "top_1s_velocity_bps": dict(sorted(vel_top.items(), key=lambda kv: abs(kv[1]), reverse=True)[:10])}
+    for name, url in [
+        ("fear_greed", "https://api.alternative.me/fng/?limit=1"),
+        ("coingecko_global", "https://api.coingecko.com/api/v3/global"),
+        ("polymarket_crypto", "https://gamma-api.polymarket.com/events?active=true&closed=false&tag_slug=crypto&limit=5"),
+        ("dexscreener_sol", "https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112"),
+    ]:
+        try:
+            req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "Hermes1sStream/6.0"})
+            with urllib.request.urlopen(req, timeout=4.0) as r:
+                domains[name] = "LIVE"
+        except Exception:
+            domains[name] = "DEGRADED"
+    return domains
+
 WORKER_STATUS_URL = "https://kucoin-desk-scan.sonia-3e6f56284b.workers.dev/status"
 
 
@@ -41,6 +92,8 @@ def _fetch_worker_account_sync() -> Dict[str, Any]:
 
 
 def run_cycle(execute: bool = True, notify_telegram: bool = True) -> Dict[str, Any]:
+    stream_sec = int(os.getenv("STREAM_1S_SECONDS", "10"))
+    md_stream = sample_1s_multi_domain_stream(duration_s=stream_sec)
     claim = can_trade("kucoin", "*", owner="hermes")
     if not claim.get("allowed"):
         return {"ok": False, "state": claim.get("state"), "reason": claim.get("reason")}
@@ -161,6 +214,7 @@ def run_cycle(execute: bool = True, notify_telegram: bool = True) -> Dict[str, A
         "ok": True,
         "owner": "hermes",
         "source_mode": source_mode,
+        "multi_domain_1s_stream": md_stream,
         "committee_crypto_seats": len(BOTS),
         "futures_equity_usdt": round(equity, 4),
         "futures_unrealised_pnl_usdt": round(unrealised_pnl, 4),
