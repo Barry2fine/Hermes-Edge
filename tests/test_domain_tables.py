@@ -26,6 +26,13 @@ from sovereign_bots.core.domain_tables import (
     price_crypto_intraday_barrier_contract,
     price_sgp_plus_with_correlation_and_bonus_snr,
     project_teammate_prop_under_star_absence,
+    DOMAIN_EQUATION_ATLAS,
+    avellaneda_stoikov_maker_quote,
+    bregman_kl_prediction_market_edge,
+    dimension_free_lsi_tail_risk_bound,
+    kesten_stigum_regime_gate,
+    matroid_prophet_slate_threshold,
+    skellam_nhl_soccer_probs,
 )
 from sovereign_bots.core.knowledge_loop import (
     SPORTS_MARKET_DEFAULTS,
@@ -182,6 +189,72 @@ class TestDomainTables(unittest.TestCase):
             )
             self.assertGreater(updated["mwu_weight"], 1.22)
             self.assertEqual(updated["early_cashout_saves"], 1)
+
+
+
+    def test_openai_2026_catalog_breakthrough_solvers(self):
+        # #229 Kesten-Stigum + #119 Hellinger Contraction
+        ks_pass = kesten_stigum_regime_gate(
+            independent_source_count=3,
+            channel_fidelities=[0.85, 0.80, 0.78],
+            noise_correlation=0.10,
+        )
+        self.assertTrue(ks_pass["reconstructible"])
+        self.assertEqual(ks_pass["action"], "PASS_REGIME_RECONSTRUCTIBLE")
+
+        ks_fail = kesten_stigum_regime_gate(
+            independent_source_count=2,
+            channel_fidelities=[0.35, 0.40],
+            noise_correlation=0.50,
+        )
+        self.assertFalse(ks_fail["reconstructible"])
+
+        # #093 Dimension-Free Subgaussian Log-Sobolev Tail Bound
+        lsi = dimension_free_lsi_tail_risk_bound(
+            position_weights=[0.15, 0.15, 0.15, 0.15, 0.15],
+            marginal_subgaussian_sigmas=[0.02, 0.025, 0.018, 0.022, 0.019],
+            target_drawdown_pct=0.06,
+            log_concavity_kappa=1.1,
+        )
+        self.assertTrue(lsi["safe_at_95pct_confidence"])
+
+        # #111 One-Sample Matroid Prophet Inequality Slate Gate
+        prophet = matroid_prophet_slate_threshold(
+            historical_sample_evs=[8.4, 7.1, 6.2, 5.5, 4.8, 3.9, 2.8],
+            max_slate_slots_k=4,
+            slots_remaining_r=2,
+            candidate_ev_pct=4.5,
+        )
+        self.assertTrue(prophet["accept"])
+
+    def test_skellam_bregman_and_avellaneda_stoikov_solvers(self):
+        sk = skellam_nhl_soccer_probs(lambda_home=3.2, lambda_away=2.8)
+        self.assertAlmostEqual(
+            sk["p_reg_home_win"] + sk["p_reg_draw_ot"] + sk["p_reg_away_win"],
+            1.0,
+            places=4,
+        )
+        self.assertGreater(sk["p_away_puckline_plus_1_5"], 0.60)
+
+        kl = bregman_kl_prediction_market_edge(
+            p_model=0.64,
+            q_market_price=0.52,
+            orderbook_vpin_toxicity=0.25,
+            bankroll_usd=200.0,
+        )
+        self.assertTrue(kl["actionable"])
+        self.assertEqual(kl["side"], "YES")
+
+        as_quote = avellaneda_stoikov_maker_quote(
+            mid_price=70000.0,
+            inventory_signed_units=0.5,
+            risk_aversion_gamma=0.1,
+            volatility_bps_per_min=8.0,
+            horizon_minutes=15.0,
+        )
+        self.assertLess(as_quote["optimal_post_only_bid"], as_quote["mid_price"])
+        self.assertGreater(as_quote["optimal_post_only_ask"], as_quote["mid_price"])
+        self.assertEqual(len(DOMAIN_EQUATION_ATLAS), 8)
 
 
 if __name__ == "__main__":
