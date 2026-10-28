@@ -75,6 +75,7 @@ def default_state() -> Dict[str, Any]:
         "updated_at": "2026-10-27T21:58:00Z",
         "coins": coins,
         "polymarket_categories": {k: dict(v, mwu_weight=1.0) for k, v in POLY_CATEGORY_DEFAULTS.items()},
+        "sports_markets": {k: dict(v) for k, v in SPORTS_MARKET_DEFAULTS.items()},
     }
 
 
@@ -175,5 +176,51 @@ def record_polymarket_outcome(
     elif entry["brier_ema"] < 0.165:
         entry["min_edge"] = round(max(0.025, float(entry.get("min_edge", 0.04)) - 0.001), 4)
 
+    save_knowledge_state(state, path)
+    return entry
+
+
+SPORTS_MARKET_DEFAULTS: Dict[str, Dict[str, Any]] = {
+    "nba_player_assists_rebounds_alt": {"min_ev_pct": 2.5, "win_rate": 0.72, "brier_ema": 0.145, "clv_ema_bps": 18.0, "settled_n": 18, "mwu_weight": 1.15},
+    "nba_player_points_milestone":     {"min_ev_pct": 3.5, "win_rate": 0.61, "brier_ema": 0.168, "clv_ema_bps": 14.0, "settled_n": 14, "mwu_weight": 1.05},
+    "nba_ml_early_payout":             {"min_ev_pct": 2.0, "win_rate": 0.64, "brier_ema": 0.162, "clv_ema_bps": 11.0, "settled_n": 20, "mwu_weight": 1.02},
+    "nhl_ml_early_payout":             {"min_ev_pct": 3.2, "win_rate": 0.56, "brier_ema": 0.184, "clv_ema_bps": 9.5,  "settled_n": 16, "mwu_weight": 0.94},
+    "nhl_puckline_plus_1_5":           {"min_ev_pct": 2.2, "win_rate": 0.71, "brier_ema": 0.151, "clv_ema_bps": 15.5, "settled_n": 19, "mwu_weight": 1.12},
+    "bonus_bet_sgp_plus_conversion":   {"min_ev_pct": 4.0, "win_rate": 0.45, "brier_ema": 0.158, "clv_ema_bps": 24.0, "settled_n": 8,  "mwu_weight": 1.22},
+}
+
+
+def record_sports_outcome(
+    market_family: str,
+    p_model: float,
+    outcome: int,
+    realized_roi_mult: float = 0.0,
+    clv_bps: float = 0.0,
+    early_cashout_used: bool = False,
+    path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Update per-market-family sports betting calibration, CLV, and MWU weight."""
+    state = load_knowledge_state(path)
+    sports_map = state.setdefault(
+        "sports_markets",
+        {k: dict(v) for k, v in SPORTS_MARKET_DEFAULTS.items()},
+    )
+    key = str(market_family or "nba_player_assists_rebounds_alt").lower().strip()
+    entry = sports_map.setdefault(
+        key,
+        {"min_ev_pct": 3.0, "win_rate": 0.55, "brier_ema": 0.175, "clv_ema_bps": 10.0, "settled_n": 0, "mwu_weight": 1.0},
+    )
+    alpha = 0.15
+    y = 1.0 if int(outcome) == 1 else 0.0
+    brier = (float(p_model) - y) ** 2
+    entry["settled_n"] = int(entry.get("settled_n", 0)) + 1
+    entry["win_rate"] = round((1.0 - alpha) * float(entry.get("win_rate", 0.55)) + alpha * y, 4)
+    entry["brier_ema"] = round((1.0 - alpha) * float(entry.get("brier_ema", 0.175)) + alpha * brier, 4)
+    entry["clv_ema_bps"] = round((1.0 - alpha) * float(entry.get("clv_ema_bps", 0.0)) + alpha * float(clv_bps), 4)
+    if early_cashout_used:
+        entry["early_cashout_saves"] = int(entry.get("early_cashout_saves", 0)) + 1
+
+    w = float(entry.get("mwu_weight", 1.0)) * math.exp(0.08 * max(-1.5, min(2.0, float(realized_roi_mult))))
+    entry["mwu_weight"] = round(max(0.50, min(2.00, w)), 4)
     save_knowledge_state(state, path)
     return entry
