@@ -287,6 +287,17 @@
       "win_rate": 0.58
     }
   },
+  "latest_walk_forward_calibration": {
+    "brier_market": 0.198913,
+    "brier_model": 0.180455,
+    "brier_skill_score": 0.092793,
+    "calibrated": true,
+    "ece": 0.289016,
+    "log_loss_market": 0.58468,
+    "log_loss_model": 0.543519,
+    "mean_clv_bps": 162.5,
+    "n": 8
+  },
   "polymarket_categories": {
     "ai_tech": {
       "base_rate_prior": 0.38,
@@ -369,6 +380,68 @@
       "resolved_n": 19
     }
   },
-  "updated_at": "2026-10-27T22:56:04Z",
+  "replayed_postmortem_picks": [
+    "3-Leg NHL ML Parlay (Bonus Bet $15.00)::CLB Blue Jackets ML (-119)",
+    "3-Leg NHL ML Parlay (Bonus Bet $15.00)::NSH Predators ML (-120)",
+    "3-Leg NHL ML Parlay (Bonus Bet $15.00)::UTA Mammoth ML (-122)",
+    "5-Leg SGP+ (Bonus Bet $25.00)::Cade Cunningham 7+ Assists (-150 SGP)",
+    "5-Leg SGP+ (Bonus Bet $25.00)::Domantas Sabonis Over 13.5 Rebounds (+102)",
+    "5-Leg SGP+ (Bonus Bet $25.00)::Jayson Tatum 5+ Assists (-440)",
+    "5-Leg SGP+ (Bonus Bet $25.00)::Karl-Anthony Towns 10+ Rebounds (-150 SGP)",
+    "5-Leg SGP+ (Bonus Bet $25.00)::Luka Doncic 30+ Points (-210)"
+  ],
+  "sports_markets": {
+    "bonus_bet_sgp_plus_conversion": {
+      "brier_ema": 0.158,
+      "clv_ema_bps": 24.0,
+      "min_ev_pct": 4.0,
+      "mwu_weight": 1.22,
+      "settled_n": 8,
+      "win_rate": 0.45
+    },
+    "nba_ml_early_payout": {
+      "brier_ema": 0.162,
+      "clv_ema_bps": 11.0,
+      "min_ev_pct": 2.0,
+      "mwu_weight": 1.02,
+      "settled_n": 20,
+      "win_rate": 0.64
+    },
+    "nba_player_assists_rebounds_alt": {
+      "brier_ema": 0.1475,
+      "clv_ema_bps": 128.8946,
+      "early_cashout_saves": 4,
+      "min_ev_pct": 2.5,
+      "mwu_weight": 1.3282,
+      "settled_n": 22,
+      "win_rate": 0.8538
+    },
+    "nba_player_points_milestone": {
+      "brier_ema": 0.1569,
+      "clv_ema_bps": 49.4,
+      "early_cashout_saves": 1,
+      "min_ev_pct": 3.5,
+      "mwu_weight": 1.0885,
+      "settled_n": 15,
+      "win_rate": 0.6685
+    },
+    "nhl_ml_early_payout": {
+      "brier_ema": 0.217,
+      "clv_ema_bps": 5.1779,
+      "min_ev_pct": 3.2,
+      "mwu_weight": 0.9214,
+      "settled_n": 19,
+      "win_rate": 0.4523
+    },
+    "nhl_puckline_plus_1_5": {
+      "brier_ema": 0.151,
+      "clv_ema_bps": 15.5,
+      "min_ev_pct": 2.2,
+      "mwu_weight": 1.12,
+      "settled_n": 19,
+      "win_rate": 0.71
+    }
+  },
+  "updated_at": "2026-10-28T07:39:08Z",
   "version": "2.0"
 }

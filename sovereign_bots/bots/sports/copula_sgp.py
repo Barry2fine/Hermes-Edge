@@ -2,12 +2,14 @@
 
 Prices joint probabilities for correlated same-game outcomes (e.g., QB passing
 yards + WR1 receiving yards, or pace-driven game total + player points) using
-latent correlation `rho` and tail-dependence vs. sportsbook SGP pricing (`edge_seat = True`).
+`compute_bivariate_copula_joint_prob` (`domain_tables.py`) with latent correlation
+`rho` and tail-dependence vs. sportsbook SGP pricing (`edge_seat = True`).
 """
 
 from __future__ import annotations
 from typing import Any, Dict, Optional
 from ...core.bot import Bot, Vote
+from ...core.domain_tables import compute_bivariate_copula_joint_prob
 
 
 def _num(x: Any) -> Optional[float]:
@@ -37,15 +39,13 @@ class StudentTCopulaSGPBot(Bot):
         if None in (p1, p2, rho, sgp_odds) or sgp_odds <= 1.0:
             return Vote(self.id, "abstain", 0.0, ["no_copula_sgp_inputs"], {})
 
-        import math
         indep_p = p1 * p2
-        cov_term = rho * math.sqrt(max(0.0, p1 * (1.0 - p1) * p2 * (1.0 - p2)))
-        tail_boost = 0.025 * abs(rho) if rho > 0.25 else 0.0
-        joint_p = max(0.001, min(0.99, indep_p + cov_term + tail_boost))
+        joint_p = float(compute_bivariate_copula_joint_prob(p1, p2, rho))
         ev = joint_p * sgp_odds - 1.0
         evidence = {
             "indep_p": round(indep_p, 4),
             "copula_joint_p": round(joint_p, 4),
+            "correlation_lift": round(joint_p - indep_p, 4),
             "sgp_decimal_odds": sgp_odds,
             "ev_roi": round(ev, 4),
         }

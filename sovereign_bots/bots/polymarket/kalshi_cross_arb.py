@@ -1,13 +1,19 @@
 """Kalshi / Sharp-Book Cross-Venue Bregman Arbitrage Seat (Soft Edge Seat).
 
 Measures Kullback-Leibler / Bregman divergence between Polymarket CLOB YES/NO
-prices and regulated Kalshi v2 / sharp sportsbook implied probabilities (`edge_seat = True`).
+prices and regulated Kalshi v2 / sharp sportsbook implied probabilities using
+`bregman_kl_prediction_market_edge` and `evaluate_polymarket_kalshi_cross_arb`
+(`edge_seat = True`).
 """
 
 from __future__ import annotations
 import math
 from typing import Any, Dict, Optional
 from ...core.bot import Bot, Vote
+from ...core.domain_tables import (
+    bregman_kl_prediction_market_edge,
+    evaluate_polymarket_kalshi_cross_arb,
+)
 
 
 def _num(x: Any) -> Optional[float]:
@@ -39,7 +45,23 @@ class KalshiPolymarketCrossArbBot(Bot):
         q = max(0.005, min(0.995, poly_p))
         kl_div = p * math.log(p / q) + (1.0 - p) * math.log((1.0 - p) / (1.0 - q))
         diff = p - q
-        evidence = {"reference_p": round(p, 4), "poly_p": round(q, 4), "prob_diff": round(diff, 4), "kl_divergence": round(kl_div, 5)}
+        breg = bregman_kl_prediction_market_edge(p_model=p, q_market_price=q)
+        arb_info = evaluate_polymarket_kalshi_cross_arb(
+            poly_yes_ask=q,
+            poly_no_ask=round(1.0 - q, 4),
+            kalshi_yes_ask=p,
+            kalshi_no_ask=round(1.0 - p, 4),
+            days_to_resolution=float(_num(ctx.get("days_to_resolve")) or 14.0),
+        )
+        evidence = {
+            "reference_p": round(p, 4),
+            "poly_p": round(q, 4),
+            "prob_diff": round(diff, 4),
+            "kl_divergence": round(kl_div, 5),
+            "bregman_kl_divergence_bps": breg["bregman_kl_divergence_bps"],
+            "quarter_kelly_stake_usd": breg["quarter_kelly_stake_usd"],
+            "executable_cross_arb": arb_info["executable_arb"],
+        }
 
         if diff >= 0.035 and kl_div >= 0.003:
             return Vote(self.id, "approve", min(0.92, 0.60 + diff * 3.0), [f"cross_venue_dislocation:+{diff*100:.1f}c"], evidence)
