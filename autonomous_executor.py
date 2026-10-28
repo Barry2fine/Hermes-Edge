@@ -871,7 +871,7 @@ def run_autonomous_executor(execute: bool = False, sync_worker: bool = True) -> 
         },
         "candidate_gate_decisions": candidate_decisions,
         "funding_sniper_45m_audit": funding_snipe_audit,
-        "kucoin_postmortem_learning": _load_json("/home/box/desk/latest_kucoin_postmortem.json").get("postmortem_summary", {}),
+        "kucoin_postmortem_learning": load_json("/home/box/desk/latest_kucoin_postmortem.json").get("postmortem_summary", {}),
     }
 
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
