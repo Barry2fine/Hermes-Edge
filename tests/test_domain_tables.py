@@ -33,6 +33,10 @@ from sovereign_bots.core.domain_tables import (
     kesten_stigum_regime_gate,
     matroid_prophet_slate_threshold,
     skellam_nhl_soccer_probs,
+    adjust_prop_for_schedule_fatigue_and_officials,
+    james_stein_empirical_bayes_shrinkage,
+    solve_live_hedge_and_middle_locked_profit,
+    solve_multi_asset_correlated_kelly,
 )
 from sovereign_bots.core.knowledge_loop import (
     SPORTS_MARKET_DEFAULTS,
@@ -255,6 +259,61 @@ class TestDomainTables(unittest.TestCase):
         self.assertLess(as_quote["optimal_post_only_bid"], as_quote["mid_price"])
         self.assertGreater(as_quote["optimal_post_only_ask"], as_quote["mid_price"])
         self.assertEqual(len(DOMAIN_EQUATION_ATLAS), 8)
+
+
+
+    def test_cross_desk_hedge_kelly_fatigue_and_bayes_solvers(self):
+        # 1. Synthetic live hedge beats shaved book cashout offer
+        hedge = solve_live_hedge_and_middle_locked_profit(
+            initial_stake_cash=25.0,
+            is_bonus_bet=True,
+            ticket_payout_gross=143.0,
+            book_cashout_offer=103.79,
+            hedge_opposite_decimal_odds=4.20,
+            middle_overlap_prob=0.04,
+        )
+        self.assertEqual(hedge["best_route"], "SYNTHETIC_OPPOSITE_SIDE_HEDGE")
+        self.assertGreater(hedge["guaranteed_hedge_net_profit_usd"], 103.79)
+
+        # 2. Multi-asset correlated Kelly scales down positively correlated legs
+        kelly_corr = solve_multi_asset_correlated_kelly(
+            candidate_edges=[0.06, 0.05],
+            candidate_variances=[0.25, 0.25],
+            pairwise_corr_matrix=[[1.0, 0.65], [0.65, 1.0]],
+            fractional_kelly_lambda=0.25,
+            max_total_leverage=0.20,
+        )
+        kelly_uncorr = solve_multi_asset_correlated_kelly(
+            candidate_edges=[0.06, 0.05],
+            candidate_variances=[0.25, 0.25],
+            pairwise_corr_matrix=[[1.0, 0.0], [0.0, 1.0]],
+            fractional_kelly_lambda=0.25,
+            max_total_leverage=0.20,
+        )
+        self.assertLess(kelly_corr["total_allocation"], kelly_uncorr["total_allocation"])
+
+        # 3. Road back-to-back at Denver altitude reduces scoring projection
+        fatigue = adjust_prop_for_schedule_fatigue_and_officials(
+            base_projected_mean=26.5,
+            stat_category="points",
+            rest_days=0,
+            is_road_back_to_back=True,
+            third_game_in_four_nights=True,
+            altitude_venue="DEN",
+            referee_foul_rate_zscore=-0.5,
+        )
+        self.assertLess(fatigue["adjusted_mean"], 24.5)
+        self.assertGreater(fatigue["fano_dispersion_multiplier"], 1.10)
+
+        # 4. Empirical-Bayes shrinks noisy 3-game hot streak toward prior
+        shrunk = james_stein_empirical_bayes_shrinkage(
+            observed_rates=[0.60, 0.20, 0.38],
+            sample_sizes=[4, 4, 50],
+            grand_prior_mean=0.365,
+            prior_strength_m=20.0,
+        )
+        self.assertLess(shrunk[0], 0.45)
+        self.assertGreater(shrunk[1], 0.30)
 
 
 if __name__ == "__main__":
