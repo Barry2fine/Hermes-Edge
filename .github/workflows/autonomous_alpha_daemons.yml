@@ -1,0 +1,36 @@
+name: Institutional Autonomous Alpha Daemons (Pre-Tipoff, Funding Harvester & Nightly CLV/Brier Grader)
+
+on:
+  schedule:
+    # Pre-Tipoff Windows (6:30 PM EDT / 22:30 UTC & 9:30 PM EDT / 01:30 UTC)
+    - cron: '30 22,1 * * *'
+    # 15 Minutes Prior to 8-Hour Perpetual Funding Settlements (23:45, 07:45, 15:45 UTC)
+    - cron: '45 7,15,23 * * *'
+    # Nightly 3:00 AM EDT (07:00 UTC) Post-Settlement CLV, Brier & Feature-Ablation Grader
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: autonomous-alpha-daemons
+  cancel-in-progress: false
+
+jobs:
+  autonomous-alpha-cycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run Pre-Tipoff Spillover, Cross-Venue Funding Harvester & CLV/Brier Grader
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SEND_TELEGRAM: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && '1' || '0' }}
+        run: |
+          python3 autonomous_alpha_github_cycle.py

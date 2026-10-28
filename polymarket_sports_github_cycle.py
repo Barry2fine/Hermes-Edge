@@ -82,9 +82,12 @@ def _ml_to_dec(ml) -> float:
 
 
 def scan_sports_slate() -> Dict[str, Any]:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    today_str = datetime.now(ZoneInfo("America/Toronto")).strftime("%Y%m%d")
     leagues = [
-        ("NBA", "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"),
-        ("NHL", "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard"),
+        ("NBA", f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates={today_str}"),
+        ("NHL", f"https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates={today_str}"),
     ]
     total = 0
     observations = []

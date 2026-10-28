@@ -287,6 +287,106 @@
       "win_rate": 0.58
     }
   },
+  "feature_ablation_weights": {
+    "bet365_early_payout_option_boost": 1.0,
+    "star_absence_usage_spillover": 1.0,
+    "student_t_copula_sgp_tail": 1.0
+  },
+  "latest_ablation_audit": {
+    "bet365_early_payout_option_boost": {
+      "ablation_keep": true,
+      "baseline_brier": 0.17482,
+      "brier_improvement": 0.013189,
+      "feature": "bet365_early_payout_option_boost",
+      "grid": {
+        "0.00": {
+          "brier": 0.17482,
+          "log_loss": 0.53279
+        },
+        "0.25": {
+          "brier": 0.171263,
+          "log_loss": 0.524697
+        },
+        "0.50": {
+          "brier": 0.167879,
+          "log_loss": 0.516876
+        },
+        "0.75": {
+          "brier": 0.164668,
+          "log_loss": 0.509327
+        },
+        "1.00": {
+          "brier": 0.161631,
+          "log_loss": 0.502047
+        }
+      },
+      "n": 5,
+      "optimal_brier": 0.161631,
+      "optimal_weight": 1.0
+    },
+    "star_absence_usage_spillover": {
+      "ablation_keep": true,
+      "baseline_brier": 0.14648,
+      "brier_improvement": 0.015085,
+      "feature": "star_absence_usage_spillover",
+      "grid": {
+        "0.00": {
+          "brier": 0.14648,
+          "log_loss": 0.476849
+        },
+        "0.25": {
+          "brier": 0.14229,
+          "log_loss": 0.466723
+        },
+        "0.50": {
+          "brier": 0.138379,
+          "log_loss": 0.456959
+        },
+        "0.75": {
+          "brier": 0.134747,
+          "log_loss": 0.447553
+        },
+        "1.00": {
+          "brier": 0.131395,
+          "log_loss": 0.438499
+        }
+      },
+      "n": 5,
+      "optimal_brier": 0.131395,
+      "optimal_weight": 1.0
+    },
+    "student_t_copula_sgp_tail": {
+      "ablation_keep": true,
+      "baseline_brier": 0.22665,
+      "brier_improvement": 0.022206,
+      "feature": "student_t_copula_sgp_tail",
+      "grid": {
+        "0.00": {
+          "brier": 0.22665,
+          "log_loss": 0.646242
+        },
+        "0.25": {
+          "brier": 0.220776,
+          "log_loss": 0.634471
+        },
+        "0.50": {
+          "brier": 0.215117,
+          "log_loss": 0.623087
+        },
+        "0.75": {
+          "brier": 0.209673,
+          "log_loss": 0.612079
+        },
+        "1.00": {
+          "brier": 0.204444,
+          "log_loss": 0.601436
+        }
+      },
+      "n": 4,
+      "optimal_brier": 0.204444,
+      "optimal_weight": 1.0
+    }
+  },
   "latest_walk_forward_calibration": {
     "brier_market": 0.198913,
     "brier_model": 0.180455,
@@ -442,6 +542,6 @@
       "win_rate": 0.71
     }
   },
-  "updated_at": "2026-10-28T07:39:08Z",
+  "updated_at": "2026-10-28T14:02:27Z",
   "version": "2.0"
 }
