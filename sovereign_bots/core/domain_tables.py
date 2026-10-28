@@ -528,7 +528,7 @@ def compute_kalshi_taker_fee_cents(price_prob: float, contracts: int = 100) -> f
     """
     p = max(0.01, min(0.99, float(price_prob)))
     c = max(1, int(contracts))
-    total_fee_cents = math.ceil(0.07 * c * p * (1.0 - p) * 100.0)
+    total_fee_cents = math.ceil(round(0.07 * c * p * (1.0 - p) * 100.0, 9))
     return round(total_fee_cents / float(c), 4)
 
 
