@@ -324,7 +324,7 @@ def evaluate_multi_domain_signal_truth_table(
     else:
         spillovers = ["polymarket_gamma_clob", "kalshi_cross_arb"]
 
-    if concrete_noul >= 0.70 and impact_noul >= 0.65 and already_priced_in_noul <= 0.45:
+    if (concrete_noul >= 0.70 or (impact_noul >= 0.75 and ambiguity_or_rumor_noul <= 0.25)) and impact_noul >= 0.65 and already_priced_in_noul <= 0.45:
         return {
             "tier": "TIER_1_SNIPE_ALPHA",
             "action": f"EXECUTE_{primary_desk.upper()}_{directional_lean.upper()}",
