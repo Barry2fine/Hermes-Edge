@@ -23,6 +23,8 @@ import json
 import os
 import re
 import urllib.parse
+import urllib.error
+import math
 import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
@@ -236,6 +238,14 @@ def format_kucoin_cycle_card(summary: Dict[str, Any]) -> str:
         f"• <b>Available Margin:</b> <code>${avail:,.2f} USDT</code>",
         f"• <b>Active Orders:</b> <code>{summary.get('active_limit_orders', 0)} Limit</code> | <code>{summary.get('active_stop_orders', 0)} Server Stops</code>",
     ]
+    assessments = (summary.get("multi_domain_1s_stream") or {}).get("market_evidence", {})
+    if assessments:
+        ready = sum(row.get("status") == "READY" for row in assessments.values())
+        lines.append(f"Market evidence: {ready}/{len(assessments)} complete observation contracts. ABSTAIN; committee not evaluated.")
+        reasons = sorted({reason for row in assessments.values() for reason in row.get("reasons", [])})
+        if reasons:
+            lines.append(_esc(", ".join(reasons)))
+        lines.append("Stream timestamps measure collection freshness; source quote time unverified.")
     if positions:
         lines.append("• <b>Open Futures Positions:</b>")
         for p in positions:
@@ -452,40 +462,47 @@ def send_institutional_telegram(
     Automatically falls back to plain text if Telegram rejects any HTML entity.
     Never raises or leaks credentials.
     """
-    tok = (token or os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
-    cid = (chat_id or os.environ.get("TELEGRAM_CHAT_ID") or os.environ.get("TELEGRAM_CHAT") or "").strip()
-    formatted = upgrade_raw_alert(text, default_desk=desk)
-
+    tok = (token if token is not None else os.environ.get("TELEGRAM_BOT_TOKEN", "")).strip()
+    cid = (chat_id if chat_id is not None else os.environ.get("TELEGRAM_CHAT_ID") or os.environ.get("TELEGRAM_CHAT", "")).strip()
+    configured = {"token_present": bool(tok), "chat_id_present": bool(cid)}
     if not tok or not cid:
-        print(f"[Telegram-Fallback]\n{formatted}")
-        return {"ok": False, "simulated": True, "reason": "missing_telegram_credentials", "formatted": formatted}
-
+        return {"ok": False, "reason": "missing_telegram_credentials", **configured}
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or not 0 < timeout <= 60:
+        return {"ok": False, "reason": "invalid_timeout"}
+    formatted = upgrade_raw_alert(text, default_desk=desk)
     url = f"https://api.telegram.org/bot{tok}/sendMessage"
-    payload = urllib.parse.urlencode({
-        "chat_id": cid,
-        "text": formatted,
-        "parse_mode": "HTML",
-        "disable_web_page_preview": "true",
-    }).encode("utf-8")
 
-    try:
-        req = urllib.request.Request(url, data=payload, method="POST")
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            body = json.loads(resp.read().decode("utf-8", errors="replace"))
-            return {"ok": resp.status == 200 and bool(body.get("ok")), "status": resp.status, "formatted": formatted}
-    except Exception as first_err:
+    def deliver(message, html_mode):
+        payload = {"chat_id": cid, "text": message, "disable_web_page_preview": "true"}
+        if html_mode:
+            payload["parse_mode"] = "HTML"
+        req = urllib.request.Request(url, data=urllib.parse.urlencode(payload).encode(), method="POST")
         try:
-            plain_payload = urllib.parse.urlencode({
-                "chat_id": cid,
-                "text": text,
-                "disable_web_page_preview": "true",
-            }).encode("utf-8")
-            req2 = urllib.request.Request(url, data=plain_payload, method="POST")
-            with urllib.request.urlopen(req2, timeout=timeout) as resp2:
-                return {"ok": resp2.status == 200, "status": resp2.status, "fallback_plain": True}
-        except Exception as second_err:
-            print(f"[Telegram-Fallback] {text} (send failed: {type(first_err).__name__}/{type(second_err).__name__})")
-            return {"ok": False, "error": type(second_err).__name__, "formatted": formatted}
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                body = json.loads(resp.read(65537).decode("utf-8"))
+                ok = resp.status == 200 and isinstance(body, dict) and body.get("ok") is True
+                return {"ok": ok, "status": resp.status, "reason": "delivered" if ok else "api_rejected"}, False
+        except urllib.error.HTTPError as exc:
+            # Retry only a definite HTML parse rejection. A timeout/5xx may have
+            # delivered already; retrying it can duplicate a message.
+            parse_rejected = False
+            if html_mode and exc.code == 400:
+                try:
+                    body = json.loads(exc.read(65537).decode("utf-8"))
+                    description = str(body.get("description", "")).lower()
+                    parse_rejected = body.get("ok") is False and any(
+                        phrase in description for phrase in ("can't parse entities", "unsupported start tag", "can't find end tag"))
+                except (ValueError, AttributeError, OSError):
+                    pass
+            return {"ok": False, "status": exc.code, "reason": "http_rejected"}, parse_rejected
+        except Exception:
+            return {"ok": False, "reason": "delivery_unconfirmed"}, False
+
+    result, parse_rejected = deliver(formatted, True)
+    if parse_rejected:
+        result, _ = deliver(text, False)
+        result["fallback_plain"] = True
+    return result
 
 
 def format_polymarket_alert_card(

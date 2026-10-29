@@ -98,12 +98,14 @@ def test_mocked_live_scanners_and_committee_wiring(tmp_path):
     # Mock KuCoin + Hyperliquid scan
     def _mock_crypto_fetch(url, method="GET", payload=None):
         if "hyperliquid" in url:
-            return [{"universe": [{"name": "BTC"}]}, [{"funding": "0.00001"}]]
+            return [{"universe": [{"name": "BTC"}]}, [{"funding": "0.00001", "markPx": "70000"}]]
         return {
             "data": [
                 {
                     "symbol": "XBTUSDTM",
                     "fundingFeeRate": 0.0020,  # +20 bps / 8h
+                    "currentFundingRateGranularity": 28800000,
+                    "quoteCurrency": "USDT",
                     "markPrice": 70100.0,
                     "indexPrice": 70000.0,
                     "turnoverOf24h": 80_000_000.0,
@@ -149,5 +151,6 @@ def test_mocked_live_scanners_and_committee_wiring(tmp_path):
     k_path = str(tmp_path / "knowledge_state.json")
     audit = run_nightly_clv_brier_ablation_audit(knowledge_path=k_path, persist=True)
     assert audit["ok"] is True
-    assert audit["calibration"]["brier_skill_score"] > 0.0
-    assert "star_absence_usage_spillover" in audit["feature_ablation_weights"]
+    assert audit["calibration"]["brier_skill_score"] is None
+    assert audit["feature_ablation_weights"] == {}
+    assert audit["ablation_status"] == "HELD_OUT_FEATURE_EVIDENCE_UNAVAILABLE"

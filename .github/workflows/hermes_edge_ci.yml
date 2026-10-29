@@ -11,17 +11,23 @@ on:
 
 jobs:
   test-and-audit:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.12']
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     env:
-      PYTHONPATH: ".:src"
+      PYTHONPATH: "."
     steps:
       - name: Checkout Hermes-Edge
         uses: actions/checkout@v4
-      - name: Set up Python 3.12
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: ${{ matrix.python }}
       - name: Install dependencies
         run: pip install -r requirements.txt pytest
-      - name: Run Safety, Post-Mortem, and 103-Seat Committee Tests
+      - name: Run offline committee, evidence and persistence tests
         run: python -m pytest -q tests/

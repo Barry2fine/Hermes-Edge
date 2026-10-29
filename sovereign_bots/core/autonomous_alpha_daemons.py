@@ -31,14 +31,14 @@ on GitHub Actions (zero Grok Bot usage) and feed live edges into the 103-seat co
    (`run_nightly_clv_brier_ablation_audit`):
    - Replays settled legs in `data/sports_postmortems.jsonl`, computes out-of-sample Brier Score,
      Brier Skill Score (`BSS`), Log-Loss, Expected Calibration Error (`ECE`), and mean CLV (bps).
-   - Runs walk-forward feature ablation (`evaluate_feature_ablation`) across active model features
-     and persists optimal shrinkage weights (`feature_ablation_weights`) into
-     `data/learning/knowledge_loop_state.json`.
+   - Reports missing held-out feature evidence without generating or persisting weights.
 """
 
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
+from .market_evidence import assess_market, market_request, observation
 import math
 import urllib.request
 from typing import Any, Dict, List, Optional, Sequence
@@ -47,12 +47,7 @@ from sovereign_bots.core.domain_tables import (
     STAR_ABSENCE_SPILLOVER_TABLE,
     project_teammate_prop_under_star_absence,
 )
-from sovereign_bots.core.knowledge_loop import (
-    load_knowledge_state,
-    save_knowledge_state,
-)
 from sovereign_bots.core.walk_forward_calibrator import (
-    evaluate_feature_ablation,
     replay_sports_postmortems,
 )
 
@@ -210,7 +205,7 @@ def scan_live_espn_scratches_and_spillovers(
             games_inspected += 1
             short_name = str(ev.get("shortName") or ev.get("name") or "")
             status_type = ((ev.get("status") or {}).get("type") or {})
-            state = str(status_type.get("state") or "pre")
+            state = str(status_type.get("state") or "unknown")
             detail = str(status_type.get("shortDetail") or "")
             comp = (ev.get("competitions") or [{}])[0]
             for c in comp.get("competitors") or []:
@@ -218,22 +213,22 @@ def scan_live_espn_scratches_and_spillovers(
                 if t_name:
                     active_teams.add(t_name)
             odds_list = comp.get("odds") or []
-            spread_abs = 4.5
+            spread_abs = None
             if odds_list and isinstance(odds_list[0], dict):
                 try:
-                    spread_abs = abs(float(odds_list[0].get("spread") or 4.5))
+                    spread_abs = abs(_finite_float(odds_list[0].get("spread"), "spread"))
                 except (TypeError, ValueError):
-                    spread_abs = 4.5
+                    spread_abs = None
             if state == "pre":
                 pre_tipoff_windows.append({
                     "league": league,
                     "matchup": short_name,
                     "start_detail": detail,
-                    "spread_abs": round(spread_abs, 2),
+                    "spread_abs": round(spread_abs, 2) if spread_abs is not None else None,
                 })
 
     confirmed_scratches: List[Dict[str, Any]] = []
-    if fetch_fn is None and active_teams:
+    if active_teams:
         for league, inj_url in [
             ("NBA", "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/injuries"),
             ("NHL", "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/injuries"),
@@ -250,7 +245,7 @@ def scan_live_espn_scratches_and_spillovers(
                     continue
                 for item in team_block.get("injuries") or []:
                     status = str(item.get("status") or "")
-                    if status.lower() not in ("out", "doubtful"):
+                    if status.lower() != "out":
                         continue
                     ath = item.get("athlete") or {}
                     p_name = str(ath.get("displayName") or "")
@@ -263,6 +258,13 @@ def scan_live_espn_scratches_and_spillovers(
                         arch = "nba_starting_rim_center_out"
                     else:
                         arch = "nba_high_usage_wing_scorer_out"
+                    identity = str(ath.get("id") or p_name)
+                    received = datetime.now(timezone.utc).isoformat()
+                    # An injury bulletin supplies neither starter confirmation nor
+                    # a teammate distribution/offer. Preserve that missing evidence.
+                    evidence = {"lineup": observation({"starter_confirmed": None, "injury_status": "confirmed_out"},
+                        {"starter_confirmed": "boolean", "injury_status": "category"}, inj_url, identity, received)}
+                    assessment = assess_market(market_request("sports.player_prop", identity, evidence))
                     confirmed_scratches.append({
                         "league": league,
                         "team": team_name,
@@ -270,6 +272,8 @@ def scan_live_espn_scratches_and_spillovers(
                         "position": pos,
                         "status": status,
                         "archetype": arch,
+                        "archetype_basis": "position_heuristic_not_verified_role",
+                        "market_evidence": assessment,
                     })
 
     return {
@@ -417,6 +421,7 @@ def scan_live_kucoin_hyperliquid_funding_arb(
 
     # 1. Fetch Hyperliquid 1h funding rates and convert to 8h bps (`1h_rate * 8 * 10000`)
     hl_funding_8h_by_coin: Dict[str, float] = {}
+    peer_assessments = []
     try:
         hl_raw = getter("https://api.hyperliquid.xyz/info", "POST", {"type": "metaAndAssetCtxs"})
         if isinstance(hl_raw, list) and len(hl_raw) >= 2:
@@ -428,7 +433,18 @@ def scan_live_kucoin_hyperliquid_funding_arb(
                     f_1h = ctx.get("funding")
                     if coin and f_1h is not None:
                         try:
-                            hl_funding_8h_by_coin[coin] = float(f_1h) * 8.0 * 10000.0
+                            received = datetime.now(timezone.utc).isoformat()
+                            peer_evidence = {
+                                "price": observation({"price": _finite_float(ctx.get("markPx"), "markPx")}, {"price": "quote/base"},
+                                    "https://api.hyperliquid.xyz/info#metaAndAssetCtxs", coin, received, ctx.get("updatedAt")),
+                                "funding": observation({"funding_rate_bps": _finite_float(f_1h, "hyperliquid_funding") * 10000, "interval_hours": 1},
+                                    {"funding_rate_bps": "bps", "interval_hours": "hours"},
+                                    "https://api.hyperliquid.xyz/info#metaAndAssetCtxs", coin, received, ctx.get("updatedAt")),
+                            }
+                            peer_assessment = assess_market(market_request("crypto.perpetual", coin, peer_evidence))
+                            peer_assessments.append(peer_assessment)
+                            if peer_assessment["status"] == "READY":
+                                hl_funding_8h_by_coin[coin] = peer_assessment["calculations"]["funding_8h_bps"]
                         except (TypeError, ValueError):
                             pass
     except Exception:
@@ -444,26 +460,43 @@ def scan_live_kucoin_hyperliquid_funding_arb(
         pass
 
     opportunities: List[Dict[str, Any]] = []
+    assessments = []
     scanned = 0
+    received_at = datetime.now(timezone.utc).isoformat()
+    source = "https://api-futures.kucoin.com/api/v1/contracts/active"
     for c in kc_contracts:
         if not isinstance(c, dict):
+            assessments.append(assess_market(None))
             continue
-        sym = str(c.get("symbol") or "")
-        f_rate = c.get("fundingFeeRate")
-        mark_px = c.get("markPrice")
-        idx_px = c.get("indexPrice")
-        turnover = c.get("turnoverOf24h") or 0.0
-        if not sym or f_rate is None or mark_px is None or idx_px is None:
+        sym = c.get("symbol")
+        def numeric(value, scale=1.0):
+            if isinstance(value, bool):
+                return value
+            try:
+                return float(value) * scale
+            except (TypeError, ValueError, OverflowError):
+                return value
+        rate = numeric(c.get("fundingFeeRate"), 10000)
+        interval = numeric(c.get("currentFundingRateGranularity", c.get("fundingRateGranularity")), 1 / 3600000)
+        m_p, i_p = numeric(c.get("markPrice")), numeric(c.get("indexPrice"))
+        turn_usd = numeric(c.get("turnoverOf24h"))
+        evidence = {}
+        for name, values, units in (
+            ("price", {"price": m_p}, {"price": "quote/base"}),
+            ("funding", {"funding_rate_bps": rate, "interval_hours": interval}, {"funding_rate_bps": "bps", "interval_hours": "hours"}),
+            ("reference_price", {"index_price": i_p}, {"index_price": "quote/base"}),
+            ("turnover", {"volume_24h_quote": turn_usd}, {"volume_24h_quote": "quote"}),
+        ):
+            evidence[name] = observation(values, units, source, sym, received_at, c.get("updatedAt"))
+        request = market_request("crypto.perpetual", sym, evidence)
+        request["market"]["quote_currency"] = c.get("quoteCurrency")
+        assessment = assess_market(request)
+        if c.get("quoteCurrency") != "USDT":
+            assessment.update(status="UNSUPPORTED", calculations={}, reasons=["funding_research_requires_USDT_quote_currency"])
+        assessments.append(assessment)
+        if assessment["status"] != "READY":
             continue
-        try:
-            kc_f8_bps = float(f_rate) * 10000.0
-            m_p = float(mark_px)
-            i_p = float(idx_px)
-            turn_usd = float(turnover)
-        except (TypeError, ValueError):
-            continue
-        if m_p <= 0 or i_p <= 0:
-            continue
+        kc_f8_bps = assessment["calculations"]["funding_8h_bps"]
         scanned += 1
         base_coin = _normalize_base_asset(sym)
         hl_f8_bps = hl_funding_8h_by_coin.get(base_coin)
@@ -476,11 +509,14 @@ def scan_live_kucoin_hyperliquid_funding_arb(
             hyperliquid_funding_8h_bps=hl_f8_bps,
             kucoin_turnover_24h_usd=turn_usd,
         )
+        eval_res.update(market_evidence=assessment, decision="ABSTAIN", committee_evaluated=False, execution_allowed=False)
         if eval_res["regime"] != "NEUTRAL_NO_HARVEST" and eval_res["regime"] != "PASS_ILLIQUID_TURNOVER":
             opportunities.append(eval_res)
 
     opportunities.sort(key=lambda x: float(x.get("expected_8h_edge_bps") or 0.0), reverse=True)
     return {
+        "market_evidence": assessments,
+        "peer_market_evidence": peer_assessments,
         "kucoin_contracts_scanned": scanned,
         "hyperliquid_coins_mapped": len(hl_funding_8h_by_coin),
         "opportunities_found": len(opportunities),
@@ -497,16 +533,7 @@ def run_nightly_clv_brier_ablation_audit(
     knowledge_path: Optional[str] = None,
     persist: bool = True,
 ) -> Dict[str, Any]:
-    """
-    Execute the nightly out-of-sample post-settlement calibration and feature-ablation
-    audit across `data/sports_postmortems.jsonl` and update `knowledge_loop_state.json`.
-
-    Evaluates feature ablation across core quantitative adjustments:
-      - `star_absence_usage_spillover`
-      - `bet365_early_payout_option_boost`
-      - `student_t_copula_sgp_tail`
-    and writes the empirically optimal shrinkage weights into `feature_ablation_weights`.
-    """
+    """Score original settled prediction evidence; report unavailable ablation data."""
     replay = replay_sports_postmortems(
         postmortem_path=postmortem_path,
         knowledge_path=knowledge_path,
@@ -519,50 +546,17 @@ def run_nightly_clv_brier_ablation_audit(
             "replay": replay,
         }
 
-    # Construct empirical feature-ablation cohorts from settled postmortem outcomes
-    # so any adjustment that hurts out-of-sample Brier Score is automatically shrunk.
-    ablation_suites: Dict[str, List[Dict[str, Any]]] = {
-        "star_absence_usage_spillover": [
-            {"p_base": 0.62, "feature_delta": 0.055, "outcome": 1},
-            {"p_base": 0.68, "feature_delta": 0.045, "outcome": 1},
-            {"p_base": 0.66, "feature_delta": 0.050, "outcome": 1},
-            {"p_base": 0.54, "feature_delta": 0.040, "outcome": 0},
-            {"p_base": 0.72, "feature_delta": 0.045, "outcome": 1},
-        ],
-        "bet365_early_payout_option_boost": [
-            {"p_base": 0.52, "feature_delta": 0.042, "outcome": 1},
-            {"p_base": 0.64, "feature_delta": 0.038, "outcome": 1},
-            {"p_base": 0.78, "feature_delta": 0.030, "outcome": 1},
-            {"p_base": 0.56, "feature_delta": 0.035, "outcome": 0},
-            {"p_base": 0.61, "feature_delta": 0.040, "outcome": 1},
-        ],
-        "student_t_copula_sgp_tail": [
-            {"p_base": 0.48, "feature_delta": 0.045, "outcome": 1},
-            {"p_base": 0.51, "feature_delta": 0.040, "outcome": 1},
-            {"p_base": 0.44, "feature_delta": 0.035, "outcome": 0},
-            {"p_base": 0.55, "feature_delta": 0.045, "outcome": 1},
-        ],
-    }
-
-    ablation_results: Dict[str, Dict[str, Any]] = {}
-    optimal_weights: Dict[str, float] = {}
-    for feat_name, cohort in ablation_suites.items():
-        res = evaluate_feature_ablation(cohort, feature_name=feat_name)
-        ablation_results[feat_name] = res
-        optimal_weights[feat_name] = float(res["optimal_weight"]) if res["ablation_keep"] else 0.0
-
-    if persist:
-        state = load_knowledge_state(knowledge_path)
-        state["feature_ablation_weights"] = optimal_weights
-        state["latest_ablation_audit"] = ablation_results
-        save_knowledge_state(state, knowledge_path)
-
+    # Historical tickets do not contain held-out feature predictions. Hardcoded
+    # cohorts cannot establish empirical weights; leave existing state untouched.
     return {
         "ok": True,
+        "status": replay["status"],
         "calibration": replay["calibration"],
         "tickets_evaluated": replay["tickets_evaluated"],
         "legs_evaluated": replay["legs_evaluated"],
         "total_net_profit_cad": replay["total_net_profit_cad"],
-        "feature_ablation_weights": optimal_weights,
-        "ablation_results": ablation_results,
+        "invalid_or_missing_evidence": replay["invalid_or_missing_evidence"],
+        "feature_ablation_weights": {},
+        "ablation_results": {},
+        "ablation_status": "HELD_OUT_FEATURE_EVIDENCE_UNAVAILABLE",
     }

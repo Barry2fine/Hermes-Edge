@@ -24,15 +24,15 @@ Enforces strict Bloomberg/Jane-Street quantitative model governance:
 from __future__ import annotations
 
 import json
+import hashlib
+from datetime import datetime, timezone
 import math
 import os
 from typing import Any, Dict, List, Optional, Sequence
 
-from sovereign_bots.core.domain_tables import american_to_decimal
 from sovereign_bots.core.knowledge_loop import (
-    load_knowledge_state,
-    record_sports_outcome,
-    save_knowledge_state,
+    apply_sports_outcome,
+    knowledge_transaction,
 )
 
 def _resolve_default_postmortem_path() -> str:
@@ -51,7 +51,7 @@ DEFAULT_POSTMORTEM_PATH = _resolve_default_postmortem_path()
 
 
 def _clip_prob(p: float, eps: float = 1e-6) -> float:
-    if not math.isfinite(p):
+    if isinstance(p, bool) or not math.isfinite(p) or not 0 <= p <= 1:
         raise ValueError("nonfinite probability")
     return max(eps, min(1.0 - eps, float(p)))
 
@@ -70,74 +70,62 @@ def compute_brier_and_log_loss(
       - `p_market` (optional): de-vigged market implied probability in (0, 1)
       - `p_closing` (optional): closing sharp probability in (0, 1)
     """
-    valid: List[Dict[str, float]] = []
+    valid = []
     for row in predictions:
-        if not isinstance(row, dict):
-            continue
         try:
-            p_m = _clip_prob(float(row["p_model"]))
-            y = 1.0 if bool(row["outcome"]) and float(row["outcome"]) > 0 else 0.0
-            p_mkt = _clip_prob(float(row.get("p_market", p_m)))
-            p_close = _clip_prob(float(row.get("p_closing", p_mkt)))
-            valid.append({"p_model": p_m, "y": y, "p_market": p_mkt, "p_closing": p_close})
-        except (KeyError, TypeError, ValueError):
+            p = row["p_model"]
+            _clip_prob(p)
+            y = row["outcome"]
+            if not isinstance(y, (int, bool)) or y not in (0, 1):
+                raise ValueError("invalid binary outcome")
+            market = row.get("p_market")
+            closing = row.get("p_closing")
+            if market is not None:
+                _clip_prob(market)
+            if closing is not None:
+                _clip_prob(closing)
+            valid.append({"p": p, "y": float(y), "market": market, "closing": closing})
+        except (KeyError, TypeError, ValueError, AttributeError):
             continue
-
     n = len(valid)
-    if n == 0:
-        return {
-            "n": 0,
-            "brier_model": None,
-            "brier_market": None,
-            "brier_skill_score": None,
-            "log_loss_model": None,
-            "log_loss_market": None,
-            "ece": None,
-            "mean_clv_bps": None,
-            "calibrated": False,
-        }
+    result = {"n": n, "brier_model": None, "brier_market": None,
+              "brier_skill_score": None, "log_loss_model": None,
+              "log_loss_market": None, "ece": None, "mean_clv_bps": None,
+              "calibrated": False}
+    if not n:
+        return result
 
-    bs_model = sum((r["p_model"] - r["y"]) ** 2 for r in valid) / n
-    bs_market = sum((r["p_market"] - r["y"]) ** 2 for r in valid) / n
-    bss = 1.0 - (bs_model / max(1e-12, bs_market)) if bs_market > 1e-9 else 0.0
+    def loss(p, y):
+        p = _clip_prob(p)
+        return -y * math.log(p) - (1 - y) * math.log(1 - p)
 
-    ll_model = -sum(
-        r["y"] * math.log(r["p_model"]) + (1.0 - r["y"]) * math.log(1.0 - r["p_model"])
-        for r in valid
-    ) / n
-    ll_market = -sum(
-        r["y"] * math.log(r["p_market"]) + (1.0 - r["y"]) * math.log(1.0 - r["p_market"])
-        for r in valid
-    ) / n
+    bs_model = sum((r["p"] - r["y"]) ** 2 for r in valid) / n
+    result["brier_model"] = round(bs_model, 6)
+    result["log_loss_model"] = round(sum(loss(r["p"], r["y"]) for r in valid) / n, 6)
+    # Compare the identical cohort only. Missing market/closing evidence is not zero.
+    if all(r["market"] is not None for r in valid):
+        bs_market = sum((r["market"] - r["y"]) ** 2 for r in valid) / n
+        result["brier_market"] = round(bs_market, 6)
+        result["brier_skill_score"] = round(1 - bs_model / bs_market, 6) if bs_market > 0 else None
+        result["log_loss_market"] = round(sum(loss(r["market"], r["y"]) for r in valid) / n, 6)
+    if all(r["market"] is not None and r["closing"] is not None for r in valid):
+        result["mean_clv_bps"] = round(sum((r["closing"] - r["market"]) * 10000 for r in valid) / n, 2)
+    k = max(2, int(bins))
+    buckets = [[] for _ in range(k)]
+    for r in valid:
+        buckets[min(k - 1, int(r["p"] * k))].append(r)
+    ece = sum(abs(sum(r["p"] - r["y"] for r in bucket)) / n for bucket in buckets)
+    result["ece"] = round(ece, 6)
+    result["calibrated"] = bool(n >= 20 and result["brier_market"] is not None
+                                and bs_model <= result["brier_market"] + 1e-6 and ece <= .15)
+    return result
 
-    # Expected Calibration Error (ECE) across K equal-width bins
-    k_bins = max(2, int(bins))
-    ece = 0.0
-    for b in range(k_bins):
-        lo = b / k_bins
-        hi = (b + 1) / k_bins
-        bucket = [
-            r for r in valid
-            if (lo <= r["p_model"] < hi) or (b == k_bins - 1 and r["p_model"] <= hi)
-        ]
-        if bucket:
-            avg_p = sum(r["p_model"] for r in bucket) / len(bucket)
-            avg_y = sum(r["y"] for r in bucket) / len(bucket)
-            ece += (len(bucket) / n) * abs(avg_p - avg_y)
 
-    mean_clv_bps = sum((r["p_closing"] - r["p_market"]) * 10000.0 for r in valid) / n
-
-    return {
-        "n": n,
-        "brier_model": round(bs_model, 6),
-        "brier_market": round(bs_market, 6),
-        "brier_skill_score": round(bss, 6),
-        "log_loss_model": round(ll_model, 6),
-        "log_loss_market": round(ll_market, 6),
-        "ece": round(ece, 6),
-        "mean_clv_bps": round(mean_clv_bps, 2),
-        "calibrated": bool(bs_model <= bs_market + 1e-6 and ece <= 0.15 or n < 20),
-    }
+def _shifted_probability(base, delta, weight):
+    adjusted = float(base) + weight * float(delta)
+    if not math.isfinite(adjusted):
+        raise ValueError("nonfinite adjusted probability")
+    return _clip_prob(max(0.0, min(1.0, adjusted)))
 
 
 def evaluate_feature_ablation(
@@ -182,7 +170,7 @@ def evaluate_feature_ablation(
         wf = float(w)
         preds = [
             {
-                "p_model": _clip_prob(float(r["p_base"]) + wf * float(r.get("feature_delta", 0.0))),
+                "p_model": _shifted_probability(r["p_base"], r.get("feature_delta", 0.0), wf),
                 "p_market": _clip_prob(float(r["p_base"])),
                 "outcome": r["outcome"],
             }
@@ -211,119 +199,102 @@ def evaluate_feature_ablation(
     }
 
 
-def _parse_american_from_pick(pick_text: str) -> Optional[int]:
-    """Extract American odds like `(-440)` or `(+102)` from a pick string."""
-    if not pick_text or "(" not in pick_text or ")" not in pick_text:
-        return None
-    inside = pick_text.rsplit("(", 1)[-1].split(")", 1)[0].strip()
-    token = inside.split()[0].strip()
-    try:
-        val = int(token)
-        if abs(val) >= 100:
-            return val
-    except ValueError:
-        pass
-    return None
+def _timestamp(value):
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise ValueError("timestamp requires timezone")
+    return parsed.astimezone(timezone.utc)
 
 
-def replay_sports_postmortems(
-    postmortem_path: Optional[str] = None,
-    knowledge_path: Optional[str] = None,
-    persist: bool = True,
-) -> Dict[str, Any]:
-    """
-    Replay settled legs from `data/sports_postmortems.jsonl`, compute empirical
-    Brier Score, Brier Skill Score vs. book implied probabilities, and optionally
-    update `knowledge_loop_state.json`.
+def _validated_leg(leg):
+    """Require original pre-event evidence; never reconstruct it from a result."""
+    for key in ("observation_id", "market_family", "model_version", "source"):
+        if not isinstance(leg.get(key), str) or not leg[key].strip():
+            raise ValueError("missing provenance")
+    prediction = _timestamp(leg["prediction_at"])
+    start = _timestamp(leg["event_start_at"])
+    closing = _timestamp(leg["closing_at"])
+    settlement = _timestamp(leg["settled_at"])
+    if not prediction <= closing <= start <= settlement <= datetime.now(timezone.utc):
+        raise ValueError("invalid evidence chronology")
+    # Caller records its model's explicit freshness policy; no invented TTL.
+    ttl = leg["max_prediction_age_seconds"]
+    if isinstance(ttl, bool) or not isinstance(ttl, (int, float)) or not math.isfinite(ttl) or ttl <= 0:
+        raise ValueError("missing freshness policy")
+    if (start - prediction).total_seconds() > ttl:
+        raise ValueError("stale prediction")
+    if any(leg.get(key) is None for key in ("p_model", "p_market", "p_closing")) or compute_brier_and_log_loss([leg])["n"] != 1:
+        raise ValueError("invalid calibration evidence")
+    for key in ("realized_roi_mult",):
+        value = leg[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise ValueError("invalid realized return")
+    keys = ("observation_id", "market_family", "model_version", "source", "prediction_at",
+            "event_start_at", "closing_at", "settled_at", "max_prediction_age_seconds",
+            "p_model", "p_market", "p_closing", "outcome", "realized_roi_mult")
+    return {key: leg[key] for key in keys}
+
+
+def replay_sports_postmortems(postmortem_path=None, knowledge_path=None, persist=True):
+    """Score recorded evidence and atomically persist outcomes with replay receipts.
+
+    Legacy pick-only legs remain unscored. IDs must identify a single settled
+    prediction across files/reruns; changing evidence for an ID is an error.
     """
     p_path = postmortem_path or DEFAULT_POSTMORTEM_PATH
     if not os.path.exists(p_path):
         return {"ok": False, "reason": "missing_postmortem_file", "legs_evaluated": 0}
-
-    leg_records: List[Dict[str, Any]] = []
-    tickets_count = 0
-    total_net_profit_cad = 0.0
-
-    with open(p_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
+    records = {}
+    invalid = 0
+    tickets = 0
+    profit = 0.0
+    with open(p_path, encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
                 continue
             try:
                 entry = json.loads(line)
-            except json.JSONDecodeError:
+                entry_tickets = entry["tickets"]
+                if not isinstance(entry_tickets, list):
+                    raise ValueError("invalid tickets")
+                amount = entry.get("net_cash_profit_cad")
+                if isinstance(amount, (int, float)) and not isinstance(amount, bool) and math.isfinite(amount):
+                    profit += amount
+            except (ValueError, KeyError, TypeError):
+                invalid += 1
                 continue
-            total_net_profit_cad += float(entry.get("net_cash_profit_cad") or 0.0)
-            for ticket in entry.get("tickets") or []:
-                tickets_count += 1
-                t_type = str(ticket.get("type") or "")
-                t_outcome = str(ticket.get("outcome") or "")
-                early_cashout = "EARLY_CASHOUT" in t_outcome.upper()
-                for leg in ticket.get("legs") or []:
-                    pick = str(leg.get("pick") or "")
-                    hit = 1 if bool(leg.get("hit")) else 0
-                    am = _parse_american_from_pick(pick)
-                    if am is not None:
-                        dec = american_to_decimal(am)
-                        # Remove ~4.5% sportsbook overround to estimate baseline market prob
-                        p_mkt = min(0.95, max(0.05, (1.0 / dec) / 1.045))
-                    else:
-                        p_mkt = 0.55
-                    # Model probability reflects our pre-ticket edge (~+3.5% over fair market on NBA props, +1.5% on NHL ML)
-                    is_nba_prop = any(k in pick.lower() for k in ("assists", "rebounds", "points"))
-                    edge_shift = 0.045 if is_nba_prop else 0.015
-                    p_mod = min(0.96, max(0.05, p_mkt + edge_shift))
-                    family = (
-                        "nba_player_assists_rebounds_alt"
-                        if any(k in pick.lower() for k in ("assists", "rebounds"))
-                        else (
-                            "nba_player_points_milestone"
-                            if "points" in pick.lower()
-                            else "nhl_ml_early_payout"
-                        )
-                    )
-                    leg_records.append({
-                        "pick": pick,
-                        "market_family": family,
-                        "p_model": p_mod,
-                        "p_market": p_mkt,
-                        "p_closing": min(0.96, p_mkt + (0.025 if hit else -0.01)),
-                        "outcome": hit,
-                        "early_cashout": early_cashout,
-                        "ticket_type": t_type,
-                    })
-
-    calibration = compute_brier_and_log_loss(leg_records)
-    if persist and leg_records:
-        state = load_knowledge_state(knowledge_path)
-        replayed_ids = set(state.get("replayed_postmortem_picks") or [])
-        newly_recorded = 0
-        for rec in leg_records:
-            pick_id = f"{rec['ticket_type']}::{rec['pick']}"
-            if pick_id not in replayed_ids:
-                record_sports_outcome(
-                    market_family=rec["market_family"],
-                    p_model=rec["p_model"],
-                    outcome=rec["outcome"],
-                    realized_roi_mult=0.45 if rec["outcome"] == 1 else -0.35,
-                    clv_bps=(rec["p_closing"] - rec["p_market"]) * 10000.0,
-                    early_cashout_used=rec["early_cashout"],
-                    path=knowledge_path,
-                )
-                replayed_ids.add(pick_id)
+            for ticket in entry_tickets:
+                tickets += 1
+                if not isinstance(ticket, dict) or not isinstance(ticket.get("legs"), list):
+                    invalid += 1
+                    continue
+                for leg in ticket["legs"]:
+                    try:
+                        rec = _validated_leg(leg)
+                    except (ValueError, KeyError, TypeError, AttributeError, OverflowError):
+                        invalid += 1
+                        continue
+                    identity = rec["observation_id"]
+                    if identity in records and records[identity] != rec:
+                        raise ValueError("conflicting observation identity")
+                    records[identity] = rec
+    calibration = compute_brier_and_log_loss(list(records.values()))
+    newly_recorded = 0
+    if persist and records:
+        with knowledge_transaction(knowledge_path) as state:
+            receipts = state.setdefault("sports_replay_receipts_v1", {})
+            for identity, rec in records.items():
+                digest = hashlib.sha256(json.dumps(rec, sort_keys=True, allow_nan=False).encode()).hexdigest()
+                if identity in receipts:
+                    if receipts[identity] != digest:
+                        raise ValueError("settled evidence changed; explicit reconciliation required")
+                    continue
+                apply_sports_outcome(state, rec["market_family"], rec["p_model"], rec["outcome"],
+                                     rec["realized_roi_mult"], (rec["p_closing"] - rec["p_market"]) * 10000)
+                receipts[identity] = digest
                 newly_recorded += 1
-        state = load_knowledge_state(knowledge_path)
-        state["replayed_postmortem_picks"] = sorted(replayed_ids)
-        state["latest_walk_forward_calibration"] = calibration
-        save_knowledge_state(state, knowledge_path)
-    else:
-        newly_recorded = 0
-
-    return {
-        "ok": True,
-        "tickets_evaluated": tickets_count,
-        "legs_evaluated": len(leg_records),
-        "newly_recorded_legs": newly_recorded,
-        "total_net_profit_cad": round(total_net_profit_cad, 2),
-        "calibration": calibration,
-    }
+            state["latest_walk_forward_calibration"] = calibration
+    return {"ok": True, "status": "SCORED" if records else "EVIDENCE_UNAVAILABLE",
+            "tickets_evaluated": tickets, "legs_evaluated": len(records),
+            "invalid_or_missing_evidence": invalid, "newly_recorded_legs": newly_recorded,
+            "total_net_profit_cad": round(profit, 2), "calibration": calibration}

@@ -24,6 +24,8 @@ def main(argv: Optional[list] = None) -> int:
                    help="allow a pack with no edge-bearing seat (context/sanity "
                         "packs only; breaks the fail-closed ALLOW rule)")
 
+    evidence = sub.add_parser("assess-market", help="validate a market evidence file and calculate supported observations; never authorize execution")
+    evidence.add_argument("--context", required=True, help="market-evidence.v1 JSON path")
     sub.add_parser("list", help="list bots per domain")
     c = sub.add_parser("coverage", help="check manifest coverage")
     c.add_argument("--manifest", default="manifest.json")
@@ -44,8 +46,22 @@ def main(argv: Optional[list] = None) -> int:
         print(json.dumps(cov, indent=2))
         return 0 if all(not v["missing"] for v in cov.values()) else 1
 
-    with open(args.context, "r", encoding="utf-8") as f:
-        ctx = json.load(f)
+    try:
+        with open(args.context, "r", encoding="utf-8") as f:
+            ctx = json.load(f)
+    except (OSError, ValueError) as exc:
+        if args.cmd != "assess-market":
+            raise
+        from .core.market_evidence import assess_market
+        result = assess_market(None)
+        result["reasons"] = ["input_acquisition_failed:" + type(exc).__name__]
+        print(json.dumps(result, indent=2, allow_nan=False))
+        return 2
+    if args.cmd == "assess-market":
+        from .core.market_evidence import assess_market
+        result = assess_market(ctx)
+        print(json.dumps(result, indent=2, allow_nan=False))
+        return 0 if result["status"] == "READY" else 2
     bots = domain_bots(args.domain)
     res = decide(bots, ctx, quorum=args.quorum, require_edge=args.require_edge)
     print(json.dumps(res, indent=2, default=str))

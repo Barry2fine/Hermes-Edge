@@ -41,8 +41,15 @@ def format_telegram_summary(report: Dict[str, Any]) -> str:
         "<b>Autonomous Alpha Daemons • Multi-Desk Cycle</b>",
         f"• <b>Pre-Tipoff Monitor:</b> {pre['games_inspected']} games inspected ({pre['status']})",
         f"• <b>Cross-Venue Funding Harvester:</b> {fund['kucoin_contracts_scanned']} KuCoin / "
-        f"{fund['hyperliquid_coins_mapped']} HL perps -> {fund['opportunities_found']} actionable setups",
+        f"{fund['hyperliquid_coins_mapped']} HL perps -> {fund['opportunities_found']} research signals (ABSTAIN)",
     ]
+    scratch_assessments = [row["market_evidence"] for row in pre.get("confirmed_scratches_sample", []) if "market_evidence" in row]
+    if scratch_assessments:
+        lines.append(f"Player-prop evidence: {sum(row['status'] == 'READY' for row in scratch_assessments)}/{len(scratch_assessments)} complete; injury bulletins alone do not price props.")
+    assessments = fund.get("market_evidence", [])
+    ready = sum(item.get("status") == "READY" for item in assessments)
+    lines.append(f"Market evidence: {ready}/{len(assessments)} complete observation contracts; no execution approval.")
+    lines.append("Funding estimates use existing research assumptions; returns are unvalidated.")
     for opp in fund.get("top_opportunities", [])[:3]:
         lines.append(
             f"  ◦ <code>{html.escape(opp['symbol'])}</code> [{opp['regime']}]: "
@@ -56,6 +63,9 @@ def format_telegram_summary(report: Dict[str, Any]) -> str:
             f"(BSS={bss_pct:+.2f}%), LogLoss={cal['log_loss_model']:.4f}, "
             f"CLV={cal['mean_clv_bps']:+.1f}bp"
         )
+    else:
+        lines.append("Calibration: EVIDENCE_UNAVAILABLE; no recorded pre-event predictions to score.")
+    lines.append("Feature ablation: held-out feature evidence unavailable; no weights produced.")
     if weights:
         w_str = ", ".join(f"{k}={v:.2f}" for k, v in sorted(weights.items()))
         lines.append(f"• <b>Ablation Weights:</b> <code>{html.escape(w_str)}</code>")
@@ -66,9 +76,12 @@ def main() -> int:
     report = build_autonomous_alpha_report()
     print(json.dumps(report, indent=2))
     send = os.environ.get("SEND_TELEGRAM", "0").strip().lower() not in ("0", "false", "no", "off", "")
-    if send and os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("TELEGRAM_CHAT_ID"):
+    if send:
         card = format_telegram_summary(report)
-        send_institutional_telegram(card)
+        delivery = send_institutional_telegram(card)
+        if not isinstance(delivery, dict) or delivery.get("ok") is not True:
+            print("TELEGRAM_DELIVERY_UNCONFIRMED")
+            return 1
     return 0
 
 
