@@ -187,6 +187,44 @@ def _fmt_hl_px(asset: str, px: float) -> str:
     return f"{val:.{dec}f}".rstrip("0").rstrip(".")
 
 
+def _find_position_id(client: Any, asset: str, pos_side: str) -> Any:
+    """Position id for `asset` on the side just opened, or None."""
+    try:
+        open_p = client.get_open_positions(base=asset) or []
+    except Exception:
+        logger.error("PROPR_POSITION_LOOKUP_FAILED:%s", asset)
+        return None
+    for p in open_p:
+        if str(p.get("positionSide") or pos_side).lower() == pos_side:
+            return p.get("positionId")
+    return None
+
+
+def _flatten_entry_without_position_id(client: Any, asset: str, side: str, qty_str: str,
+                                       entry_ord: Dict[str, Any]) -> Dict[str, Any]:
+    """Fail-closed: an entry that may have filled but cannot be bracketed (no
+    position id) is flattened and recorded for operator review, never left naked."""
+    logger.error("PROPR_NO_POSITION_ID_EMERGENCY_FLATTEN:%s", asset)
+    flat_ok = False
+    try:
+        client.close_position(base=asset)
+        flat_ok = True
+    except Exception:
+        logger.error("PROPR_EMERGENCY_FLATTEN_FAILED:%s", asset)
+    return {
+        "ok": False,
+        "requires_operator_review": True,
+        "reason": "no_position_id_after_entry",
+        "emergency_flatten_ok": flat_ok,
+        "ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "book": "PROPR",
+        "asset": asset,
+        "side": side,
+        "quantity": float(qty_str),
+        "entry_order_id": (entry_ord or {}).get("orderId"),
+    }
+
+
 def manage_and_execute_propr(
     active_genome: Dict[str, Any],
     sizing_table: List[Dict[str, Any]],
@@ -408,9 +446,12 @@ def manage_and_execute_propr(
             tp_final = _fmt_hl_px(asset, fill_px * (1.0 + tp_r_mult * stop_pct) if side == "LONG" else fill_px * (1.0 - tp_r_mult * stop_pct))
 
             if not pos_id:
-                open_p = client.get_open_positions(base=asset)
-                if open_p:
-                    pos_id = open_p[0].get("positionId")
+                pos_id = _find_position_id(client, asset, pos_side)
+            if not pos_id:
+                newly_executed_propr.append(
+                    _flatten_entry_without_position_id(client, asset, side, qty_str, entry_ord))
+                active_propr_assets.add(asset)
+                continue
 
             sl_ord_id = None
             tp_ord_id = None
