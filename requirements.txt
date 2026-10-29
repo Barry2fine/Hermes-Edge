@@ -5,3 +5,4 @@ websocket-client
 python-telegram-bot
 python-ulid
 python-dotenv
+tzdata

@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 from typing import Any, Dict, Iterable, List
+from .bot import Vote
 
 
 def _hash(obj: Any) -> str:
@@ -73,7 +74,14 @@ def decide(bots: Iterable[Any], context: Dict[str, Any], quorum: int = 1,
     edge_approves = []
     edge_seats = 0
     for b in bots:
-        v = b.vote(context)
+        try:
+            v = b.vote(context)
+            if not isinstance(v, Vote):
+                raise TypeError("vote must return Vote")
+            v.validate()
+        except Exception as exc:
+            v = Vote(b.id, "reject" if b.veto else "abstain", 0.0,
+                     [f"invalid_vote:{type(exc).__name__}"], {"error": True})
         votes.append(v)
         seat = establishes_edge(b)
         if seat:

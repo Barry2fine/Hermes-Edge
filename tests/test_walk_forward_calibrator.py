@@ -32,7 +32,7 @@ class WalkForwardCalibratorTests(unittest.TestCase):
         self.assertLess(res["brier_model"], res["brier_market"])
         self.assertGreater(res["brier_skill_score"], 0.0)
         self.assertLess(res["log_loss_model"], res["log_loss_market"])
-        self.assertTrue(res["calibrated"])
+        self.assertFalse(res["calibrated"])  # four observations are not certification
 
     def test_feature_ablation_keeps_helpful_and_prunes_noisy(self):
         helpful_records = [
@@ -61,12 +61,11 @@ class WalkForwardCalibratorTests(unittest.TestCase):
             res = replay_sports_postmortems(knowledge_path=k_path, persist=True)
             self.assertTrue(res["ok"])
             self.assertGreaterEqual(res["tickets_evaluated"], 2)
-            self.assertEqual(res["legs_evaluated"], 8)
-            self.assertEqual(res["newly_recorded_legs"], 8)
-            self.assertAlmostEqual(res["total_net_profit_cad"], 103.79, places=2)
-            cal = res["calibration"]
-            self.assertLess(cal["brier_model"], cal["brier_market"])
-            self.assertGreater(cal["brier_skill_score"], 0.0)
+            self.assertEqual(res["legs_evaluated"], 0)
+            self.assertEqual(res["newly_recorded_legs"], 0)
+            self.assertEqual(res["status"], "EVIDENCE_UNAVAILABLE")
+            self.assertEqual(res["invalid_or_missing_evidence"], 8)
+            self.assertFalse(os.path.exists(k_path))
 
             # Second replay is idempotent (0 newly recorded legs)
             res2 = replay_sports_postmortems(knowledge_path=k_path, persist=True)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Tuple
 
@@ -17,9 +19,13 @@ class Vote:
     evidence: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
+        self.validate()
+
+    def validate(self):
         if self.decision not in DECISIONS:
             raise ValueError(f"bad decision {self.decision!r}")
-        self.confidence = max(0.0, min(1.0, float(self.confidence or 0.0)))
+        if isinstance(self.confidence, bool) or not isinstance(self.confidence, (int, float)) or not math.isfinite(self.confidence) or not 0 <= self.confidence <= 1:
+            raise ValueError("confidence must be finite and between zero and one")
 
     def as_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -47,6 +53,7 @@ class Bot:
             v = self.evaluate(context or {})
             if not isinstance(v, Vote):
                 raise TypeError("evaluate must return Vote")
+            v.validate()
             return v
         except Exception as exc:  # noqa: BLE001
             return Vote(self.id, "reject" if self.veto else "abstain", 0.0,

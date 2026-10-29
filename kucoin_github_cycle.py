@@ -10,6 +10,8 @@ when running on US-hosted GitHub Actions runners (`HTTP 451000` geo-block), upda
 """
 from __future__ import annotations
 import json
+import math
+from datetime import datetime, timezone
 import os
 import sys
 import urllib.request
@@ -20,7 +22,7 @@ sys.path.insert(0, ROOT)
 
 from kucoin_client import KuCoinClient
 from sovereign_bots.bots.crypto import BOTS, get_coin_bot
-from sovereign_bots.core.knowledge_loop import load_knowledge_state, save_knowledge_state
+from sovereign_bots.core.market_evidence import assess_market, market_request, observation
 from sovereign_bots.core.telegram_alerts import format_kucoin_cycle_card, send_institutional_telegram
 from src.ops.coordination import can_trade
 
@@ -30,6 +32,8 @@ from collections import deque
 
 def sample_1s_multi_domain_stream(duration_s: int = 12) -> Dict[str, Any]:
     """Stream live 1-second (1 Hz) price ticks across all perp markets + pull DexScreener, Polymarket, CoinGecko & Fear/Greed."""
+    if isinstance(duration_s, bool) or not isinstance(duration_s, int) or not 1 <= duration_s <= 30:
+        raise ValueError("stream duration must be 1..30 seconds")
     tape: Dict[str, deque] = {}
     for i in range(max(1, duration_s)):
         t0 = time.time()
@@ -45,7 +49,12 @@ def sample_1s_multi_domain_stream(duration_s: int = 12) -> Dict[str, Any]:
             if isinstance(mids, dict):
                 for c, px_s in mids.items():
                     try:
-                        tape.setdefault(c, deque(maxlen=120)).append((now, float(px_s)))
+                        if isinstance(px_s, bool):
+                            raise ValueError("boolean price")
+                        price = float(px_s)
+                        if not math.isfinite(price) or price <= 0:
+                            raise ValueError("invalid price")
+                        tape.setdefault(c, deque(maxlen=120)).append((now, price))
                     except Exception:
                         pass
         except Exception:
@@ -55,12 +64,27 @@ def sample_1s_multi_domain_stream(duration_s: int = 12) -> Dict[str, Any]:
             time.sleep(max(0.05, 1.0 - dt))
 
     vel_top = {}
+    invalid_sample_changes = {}
     for c, dq in tape.items():
         if len(dq) >= 2 and dq[0][1] > 0:
             vb = (dq[-1][1] - dq[0][1]) / dq[0][1] * 10000.0
-            vel_top[c] = round(vb, 2)
+            if math.isfinite(vb):
+                vel_top[c] = round(vb, 2)
+            else:
+                invalid_sample_changes[c] = "nonfinite_sample_change"
 
-    domains = {"stream_1hz_coins": len(tape), "stream_seconds": duration_s, "top_1s_velocity_bps": dict(sorted(vel_top.items(), key=lambda kv: abs(kv[1]), reverse=True)[:10])}
+    assessments = {}
+    for coin, samples in tape.items():
+        received = datetime.fromtimestamp(samples[-1][0], timezone.utc).isoformat()
+        evidence = {"price": observation({"price": samples[-1][1]}, {"price": "quote/base"},
+                    "https://api.hyperliquid.xyz/info#allMids", coin, received)}
+        if len(samples) >= 2:
+            evidence["tape"] = observation({"prices": [p for _, p in samples]}, {"prices": "quote/base"},
+                    "https://api.hyperliquid.xyz/info#allMids", coin, received)
+        assessments[coin] = assess_market(market_request("crypto.perpetual", coin, evidence))
+    domains = {"market_evidence": assessments, "invalid_sample_changes": invalid_sample_changes,
+               "decision": "ABSTAIN", "committee_evaluated": False,
+               "stream_1hz_coins": len(tape), "stream_seconds": duration_s, "raw_sample_change_bps": dict(sorted(vel_top.items(), key=lambda kv: abs(kv[1]), reverse=True)[:10])}
     for name, url in [
         ("fear_greed", "https://api.alternative.me/fng/?limit=1"),
         ("coingecko_global", "https://api.coingecko.com/api/v3/global"),
@@ -70,7 +94,7 @@ def sample_1s_multi_domain_stream(duration_s: int = 12) -> Dict[str, Any]:
         try:
             req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "Hermes1sStream/6.0"})
             with urllib.request.urlopen(req, timeout=4.0) as r:
-                domains[name] = "LIVE"
+                domains[name] = "ACQUIRED_UNVALIDATED"
         except Exception:
             domains[name] = "DEGRADED"
     return domains
@@ -166,10 +190,11 @@ def run_cycle(execute: bool = True, notify_telegram: bool = True) -> Dict[str, A
             for a in spot_accts
         ]
         active_stop_count = len(stop_orders) - len(cleaned)
-        try:
-            kc.sync_worker_state()
-        except Exception:
-            pass
+        if execute:
+            try:
+                kc.sync_worker_state()
+            except Exception:
+                pass
     else:
         # Fallback for US-hosted GitHub Actions runners where KuCoin returns HTTP 451000 geo-block
         w_sync = _fetch_worker_account_sync()
@@ -206,9 +231,7 @@ def run_cycle(execute: bool = True, notify_telegram: bool = True) -> Dict[str, A
                     "has_maker_tp": sym in tp_syms,
                 })
 
-    # 4. Touch knowledge loop state heartbeat
-    k_state = load_knowledge_state()
-    save_knowledge_state(k_state)
+    # This reporting cycle has no learning observation to commit.
 
     summary = {
         "ok": True,

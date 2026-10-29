@@ -16,6 +16,9 @@ import json
 import math
 import os
 import time
+import threading
+from contextlib import contextmanager
+from .state_io import atomic_json, state_lock
 from typing import Any, Dict, List, Optional
 
 DEFAULT_STORE_PATH = os.path.join(
@@ -24,6 +27,7 @@ DEFAULT_STORE_PATH = os.path.join(
     "learning",
     "knowledge_loop_state.json",
 )
+_transactions = threading.local()
 
 COIN_DEFAULTS: Dict[str, Dict[str, Any]] = {
     "BTC":  {"cluster": "btc_eth", "min_vol_pct": 0.8, "max_vol_pct": 4.8, "max_spread_bps": 4.5, "funding_crowd_bps": 12.0, "preferred_venues": ["kucoin_usdtm_perp", "hyperliquid_propr_perp", "kucoin_coinm_inverse"]},
@@ -81,24 +85,45 @@ def default_state() -> Dict[str, Any]:
 
 def load_knowledge_state(path: Optional[str] = None) -> Dict[str, Any]:
     p = path or DEFAULT_STORE_PATH
-    if os.path.exists(p):
-        try:
-            with open(p, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, dict) and "coins" in data and "polymarket_categories" in data:
-                return data
-        except Exception:
-            pass
-    return default_state()
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            data = json.load(f, parse_constant=lambda value: (_ for _ in ()).throw(ValueError("nonfinite state")))
+    except FileNotFoundError:
+        return default_state()
+    if not isinstance(data, dict) or any(not isinstance(data.get(key), dict)
+                                        for key in ("coins", "polymarket_categories")):
+        raise ValueError("invalid knowledge state schema; restore a verified backup")
+    return data
 
 
 def save_knowledge_state(state: Dict[str, Any], path: Optional[str] = None) -> str:
     p = path or DEFAULT_STORE_PATH
-    os.makedirs(os.path.dirname(p), exist_ok=True)
-    state["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    with open(p, "w", encoding="utf-8") as f:
-        json.dump(state, f, indent=2, sort_keys=True)
+    with state_lock(p):
+        saved = dict(state, updated_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+        atomic_json(p, saved)
     return p
+
+
+@contextmanager
+def knowledge_transaction(path=None):
+    """Commit one snapshot; reject nesting that would overwrite an inner update."""
+    p = path or DEFAULT_STORE_PATH
+    # PID separates a forked child's transaction ownership from its parent's.
+    key = (os.getpid(), os.path.normcase(os.path.realpath(p)))
+    active = getattr(_transactions, "active", set())
+    _transactions.active = active
+    if key in active:
+        raise RuntimeError("nested knowledge transaction for the same state is unsupported")
+    with state_lock(p):
+        active.add(key)
+        try:
+            state = load_knowledge_state(p)
+            yield state
+            if os.getpid() != key[0]:
+                raise RuntimeError("cannot commit an inherited knowledge transaction after fork")
+            save_knowledge_state(state, p)
+        finally:
+            active.remove(key)
 
 
 def record_coin_outcome(
@@ -111,35 +136,34 @@ def record_coin_outcome(
     path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Update per-coin Bayesian / MWU knowledge state from a completed trade or shadow scan."""
-    state = load_knowledge_state(path)
-    c_key = str(coin or "").upper().replace("USDTM", "").replace("USDM", "").replace("-USDT", "")
-    if c_key == "XBT":
-        c_key = "BTC"
-    entry = state["coins"].setdefault(c_key, dict(COIN_DEFAULTS.get("BTC", {}), trades_n=0, win_rate=0.5, ema_realized_r=0.0, ema_clv_bps=0.0, brier_ema=0.20, mwu_weight=1.0))
-    alpha = 0.15
-    is_win = (realized_r > 0) if win is None else bool(win)
-    outcome = 1.0 if is_win else 0.0
-    brier = (float(p_pred) - outcome) ** 2
+    with knowledge_transaction(path) as state:
+        c_key = str(coin or "").upper().replace("USDTM", "").replace("USDM", "").replace("-USDT", "")
+        if c_key == "XBT":
+            c_key = "BTC"
+        entry = state["coins"].setdefault(c_key, dict(COIN_DEFAULTS.get("BTC", {}), trades_n=0, win_rate=0.5, ema_realized_r=0.0, ema_clv_bps=0.0, brier_ema=0.20, mwu_weight=1.0))
+        alpha = 0.15
+        is_win = (realized_r > 0) if win is None else bool(win)
+        outcome = 1.0 if is_win else 0.0
+        brier = (float(p_pred) - outcome) ** 2
 
-    entry["trades_n"] = int(entry.get("trades_n", 0)) + 1
-    entry["win_rate"] = round((1.0 - alpha) * float(entry.get("win_rate", 0.5)) + alpha * outcome, 4)
-    entry["ema_realized_r"] = round((1.0 - alpha) * float(entry.get("ema_realized_r", 0.0)) + alpha * float(realized_r), 4)
-    entry["ema_clv_bps"] = round((1.0 - alpha) * float(entry.get("ema_clv_bps", 0.0)) + alpha * float(clv_bps), 4)
-    entry["brier_ema"] = round((1.0 - alpha) * float(entry.get("brier_ema", 0.20)) + alpha * brier, 4)
+        entry["trades_n"] = int(entry.get("trades_n", 0)) + 1
+        entry["win_rate"] = round((1.0 - alpha) * float(entry.get("win_rate", 0.5)) + alpha * outcome, 4)
+        entry["ema_realized_r"] = round((1.0 - alpha) * float(entry.get("ema_realized_r", 0.0)) + alpha * float(realized_r), 4)
+        entry["ema_clv_bps"] = round((1.0 - alpha) * float(entry.get("ema_clv_bps", 0.0)) + alpha * float(clv_bps), 4)
+        entry["brier_ema"] = round((1.0 - alpha) * float(entry.get("brier_ema", 0.20)) + alpha * brier, 4)
 
-    # Multiplicative Weights Update (eta = 0.08)
-    eta = 0.08
-    w = float(entry.get("mwu_weight", 1.0)) * math.exp(eta * max(-1.5, min(1.5, float(realized_r))))
-    entry["mwu_weight"] = round(max(0.40, min(2.00, w)), 4)
-    if venue and is_win and realized_r >= 0.5:
-        venues = list(entry.get("preferred_venues") or [])
-        if venue in venues:
-            venues.remove(venue)
-        venues.insert(0, venue)
-        entry["preferred_venues"] = venues[:4]
+        # Multiplicative Weights Update (eta = 0.08)
+        eta = 0.08
+        w = float(entry.get("mwu_weight", 1.0)) * math.exp(eta * max(-1.5, min(1.5, float(realized_r))))
+        entry["mwu_weight"] = round(max(0.40, min(2.00, w)), 4)
+        if venue and is_win and realized_r >= 0.5:
+            venues = list(entry.get("preferred_venues") or [])
+            if venue in venues:
+                venues.remove(venue)
+            venues.insert(0, venue)
+            entry["preferred_venues"] = venues[:4]
 
-    save_knowledge_state(state, path)
-    return entry
+        return entry
 
 
 def record_polymarket_outcome(
@@ -151,33 +175,32 @@ def record_polymarket_outcome(
     path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Update per-category Polymarket calibration and MWU weight after contract resolution or CLV mark."""
-    state = load_knowledge_state(path)
-    cat = str(category or "other").lower().strip()
-    entry = state["polymarket_categories"].setdefault(
-        cat,
-        {"min_edge": 0.040, "base_rate_prior": 0.45, "brier_ema": 0.180, "clv_ema_cents": 1.0, "resolved_n": 0, "mwu_weight": 1.0},
-    )
-    alpha = 0.15
-    y = 1.0 if int(outcome) == 1 else 0.0
-    brier_m = (float(p_model) - y) ** 2
-    brier_mkt = (float(p_market) - y) ** 2
-    skill = brier_mkt - brier_m  # positive means model beat market
+    with knowledge_transaction(path) as state:
+        cat = str(category or "other").lower().strip()
+        entry = state["polymarket_categories"].setdefault(
+            cat,
+            {"min_edge": 0.040, "base_rate_prior": 0.45, "brier_ema": 0.180, "clv_ema_cents": 1.0, "resolved_n": 0, "mwu_weight": 1.0},
+        )
+        alpha = 0.15
+        y = 1.0 if int(outcome) == 1 else 0.0
+        brier_m = (float(p_model) - y) ** 2
+        brier_mkt = (float(p_market) - y) ** 2
+        skill = brier_mkt - brier_m  # positive means model beat market
 
-    entry["resolved_n"] = int(entry.get("resolved_n", 0)) + 1
-    entry["brier_ema"] = round((1.0 - alpha) * float(entry.get("brier_ema", 0.18)) + alpha * brier_m, 4)
-    entry["clv_ema_cents"] = round((1.0 - alpha) * float(entry.get("clv_ema_cents", 0.0)) + alpha * float(clv_cents), 4)
-    entry["base_rate_prior"] = round((1.0 - 0.05) * float(entry.get("base_rate_prior", 0.45)) + 0.05 * y, 4)
+        entry["resolved_n"] = int(entry.get("resolved_n", 0)) + 1
+        entry["brier_ema"] = round((1.0 - alpha) * float(entry.get("brier_ema", 0.18)) + alpha * brier_m, 4)
+        entry["clv_ema_cents"] = round((1.0 - alpha) * float(entry.get("clv_ema_cents", 0.0)) + alpha * float(clv_cents), 4)
+        entry["base_rate_prior"] = round((1.0 - 0.05) * float(entry.get("base_rate_prior", 0.45)) + 0.05 * y, 4)
 
-    w = float(entry.get("mwu_weight", 1.0)) * math.exp(0.25 * max(-0.5, min(0.5, skill)))
-    entry["mwu_weight"] = round(max(0.50, min(1.80, w)), 4)
-    # Tighten or relax min_edge hurdle inversely to skill
-    if entry["brier_ema"] > 0.21:
-        entry["min_edge"] = round(min(0.065, float(entry.get("min_edge", 0.04)) + 0.002), 4)
-    elif entry["brier_ema"] < 0.165:
-        entry["min_edge"] = round(max(0.025, float(entry.get("min_edge", 0.04)) - 0.001), 4)
+        w = float(entry.get("mwu_weight", 1.0)) * math.exp(0.25 * max(-0.5, min(0.5, skill)))
+        entry["mwu_weight"] = round(max(0.50, min(1.80, w)), 4)
+        # Tighten or relax min_edge hurdle inversely to skill
+        if entry["brier_ema"] > 0.21:
+            entry["min_edge"] = round(min(0.065, float(entry.get("min_edge", 0.04)) + 0.002), 4)
+        elif entry["brier_ema"] < 0.165:
+            entry["min_edge"] = round(max(0.025, float(entry.get("min_edge", 0.04)) - 0.001), 4)
 
-    save_knowledge_state(state, path)
-    return entry
+        return entry
 
 
 SPORTS_MARKET_DEFAULTS: Dict[str, Dict[str, Any]] = {
@@ -200,7 +223,20 @@ def record_sports_outcome(
     path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Update per-market-family sports betting calibration, CLV, and MWU weight."""
-    state = load_knowledge_state(path)
+    with knowledge_transaction(path) as state:
+        return apply_sports_outcome(state, market_family, p_model, outcome,
+                                    realized_roi_mult, clv_bps, early_cashout_used)
+
+
+def apply_sports_outcome(state, market_family, p_model, outcome,
+                         realized_roi_mult=0.0, clv_bps=0.0, early_cashout_used=False):
+    """Apply one validated observation inside the caller's state transaction."""
+    if isinstance(p_model, bool) or not math.isfinite(float(p_model)) or not 0 <= float(p_model) <= 1:
+        raise ValueError("invalid model probability")
+    if outcome not in (0, 1) or not isinstance(outcome, (int, bool)):
+        raise ValueError("outcome must be binary")
+    if any(isinstance(v, bool) or not math.isfinite(float(v)) for v in (realized_roi_mult, clv_bps)):
+        raise ValueError("invalid realized evidence")
     sports_map = state.setdefault(
         "sports_markets",
         {k: dict(v) for k, v in SPORTS_MARKET_DEFAULTS.items()},
@@ -222,5 +258,4 @@ def record_sports_outcome(
 
     w = float(entry.get("mwu_weight", 1.0)) * math.exp(0.08 * max(-1.5, min(2.0, float(realized_roi_mult))))
     entry["mwu_weight"] = round(max(0.50, min(2.00, w)), 4)
-    save_knowledge_state(state, path)
     return entry
